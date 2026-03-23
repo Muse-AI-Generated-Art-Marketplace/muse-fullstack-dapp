@@ -74,6 +74,15 @@
   .grid-mobile {
     @apply grid-cols-1 gap-4 px-4;
   }
+
+  /* Responsive grid improvements */
+  .grid-responsive {
+    @apply grid-cols-1 gap-4 px-4;
+    @apply xs:grid-cols-2;
+    @apply md:grid-cols-2;
+    @apply lg:grid-cols-3;
+    @apply xl:grid-cols-4;
+  }
   
   /* Mobile heading optimizations */
   .heading-mobile {
@@ -128,12 +137,36 @@
   .text-mobile-lg {
     @apply text-lg leading-relaxed;
   }
-  
+
   .text-mobile-base {
     @apply text-base leading-normal;
   }
-  
+
   .text-mobile-sm {
     @apply text-sm leading-relaxed;
+  }
+
+  /* Line clamping utilities */
+  .line-clamp-2 {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  .line-clamp-3 {
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  /* Responsive padding utilities */
+  .responsive-padding {
+    @apply px-4 sm:px-6 lg:px-8;
+  }
+
+  .responsive-gap {
+    @apply gap-4 sm:gap-6 lg:gap-8;
   }
 }
