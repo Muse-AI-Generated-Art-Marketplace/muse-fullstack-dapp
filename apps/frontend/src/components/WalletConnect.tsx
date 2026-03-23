@@ -2,10 +2,12 @@ import { useState } from 'react'
 import { Wallet, LogOut, Settings } from 'lucide-react'
 import { useStellar } from '@/hooks/useStellar'
 import { ErrorDisplay } from '@/components/ErrorDisplay'
+import { useErrorContext } from '@/contexts/ErrorContext'
 import { AppError } from '@/utils/errorHandler'
 
 export function WalletConnect() {
   const { account, isLoading, connectWallet, disconnectWallet, network, setNetwork } = useStellar()
+  const { showError } = useErrorContext()
   const [showNetworkSwitch, setShowNetworkSwitch] = useState(false)
   const [error, setError] = useState<AppError | null>(null)
 
@@ -16,6 +18,7 @@ export function WalletConnect() {
     } catch (error) {
       const appError = error as AppError
       setError(appError)
+      showError(appError)
     }
   }
 
