@@ -13,14 +13,11 @@
   },
   "devDependencies": {
     "@stellar/stellar-sdk": "^11.0.0",
-    "@stellar/soroban-cli": "^1.0.0",
     "@types/node": "^20.5.0",
     "typescript": "^5.1.6",
     "ts-node": "^10.9.1",
     "jest": "^29.6.2",
     "@types/jest": "^29.5.4"
   },
-  "dependencies": {
-    "stellar-contracts": "^0.8.0"
-  }
+  "dependencies": {}
 }

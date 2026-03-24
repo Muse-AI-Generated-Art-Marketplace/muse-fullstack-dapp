@@ -1,26 +1,17 @@
-import { Button } from '@/components/ui/Button'
-import { Grid } from '@/components/layout/Grid'
-import { ArtworkCard } from '@/components/artwork/ArtworkCard'
+import { useArtworks, ArtworksFilters, type Artwork, type ArtworksResponse } from '@/services/artworkService'
 
-// Mock data for demonstration
-const mockArtworks = Array.from({ length: 6 }, (_, i) => ({
-  id: `mock-${i + 1}`,
-  title: `AI Artwork #${i + 1}`,
-  description: 'Generated with AI Model',
-  imageUrl: '',
-  price: '0.1',
-  currency: 'ETH',
-  creator: `Artist ${i + 1}`
-}))
+import { ArtworkGrid } from '@/components/ArtworkGrid'
 
 export function HomePage() {
-  const handleArtworkView = (artwork: typeof mockArtworks[0]) => {
-    console.log('View artwork:', artwork)
-  }
+  const filters = { sortBy: 'popular' } as ArtworksFilters
 
-  const handleArtworkPurchase = (artwork: typeof mockArtworks[0]) => {
-    console.log('Purchase artwork:', artwork)
-  }
+  const {
+    data: featuredData,
+    isLoading: featuredLoading,
+    isFetchingNextPage: featuredFetchingNext,
+  } = useArtworks(filters)
+
+  const featuredArtworks: Artwork[] = featuredData?.pages.flatMap((page: ArtworksResponse) => page.data) || []
 
   return (
     <div className="min-h-screen bg-background">
@@ -37,10 +28,10 @@ export function HomePage() {
           </p>
           
           <div className="flex flex-col gap-3 mobile-container">
-            <Button variant="primary" size="md" fullWidth>
+            <a href="/explore" className="btn-primary w-full text-base font-medium">
               Start Exploring
-            </Button>
-            <Button variant="outline" size="md" fullWidth>
+            </a>
+            <button className="btn-outline w-full text-base font-medium">
               Create Art
             </Button>
           </div>
@@ -49,20 +40,18 @@ export function HomePage() {
       
       <div className="mobile-section">
         <h2 className="subheading-mobile mb-6">Featured Artworks</h2>
-        <Grid responsive gap="md">
-          {mockArtworks.map((artwork) => (
-            <ArtworkCard
-              key={artwork.id}
-              artwork={artwork}
-              variant="default"
-              onView={handleArtworkView}
-              onPurchase={handleArtworkPurchase}
-              showPrice={true}
-              showCreator={false}
-            />
-          ))}
-        </Grid>
+        <ArtworkGrid
+          artworks={featuredArtworks.slice(0, 6)}
+          isLoading={featuredLoading}
+          hasNextPage={false}
+          isFetchingNextPage={featuredFetchingNext}
+          onLoadMore={() => {}}
+          onPurchase={(artwork) => console.log('Purchase featured:', artwork)}
+          onClearFilters={() => {}}
+          hasFilters={false}
+        />
       </div>
     </div>
   )
 }
+

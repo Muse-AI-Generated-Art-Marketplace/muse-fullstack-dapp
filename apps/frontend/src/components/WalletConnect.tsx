@@ -126,4 +126,5 @@ export function WalletConnect() {
       </button>
     )}
   </div>
+  )
 }

@@ -1,5 +1,6 @@
+import React from 'react'
 import { AlertCircle, RefreshCw, X } from 'lucide-react'
-import { AppError } from '@/utils/errorHandler'
+import { AppError, ErrorHandler } from '@/utils/errorHandler'
 
 interface ErrorDisplayProps {
   error: AppError | null
@@ -54,13 +55,13 @@ export function ErrorDisplay({
     <div className={`border rounded-lg p-4 ${getErrorColor()} ${className}`}>
       <div className="flex items-start space-x-3">
         {getErrorIcon()}
-        
+
         <div className="flex-1 min-w-0">
           <h3 className="text-sm font-medium mb-1">
             {error.code.replace('_', ' ').charAt(0).toUpperCase() + error.code.replace('_', ' ').slice(1)}
           </h3>
           <p className="text-sm">{error.userMessage}</p>
-          
+
           {error.isRecoverable && showRetry && onRetry && (
             <button
               onClick={onRetry}
@@ -71,7 +72,7 @@ export function ErrorDisplay({
             </button>
           )}
         </div>
-        
+
         {showDismiss && onDismiss && (
           <button
             onClick={onDismiss}
@@ -202,6 +203,3 @@ export class ErrorBoundary extends React.Component<
   }
 }
 
-// Import React for the ErrorBoundary
-import React from 'react'
-import { ErrorHandler } from '@/utils/errorHandler'
