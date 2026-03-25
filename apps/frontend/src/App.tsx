@@ -1,6 +1,6 @@
 import { Routes, Route } from "react-router-dom";
 import { Navbar } from "@/components/Navbar";
-import { HomePage } from "@/pages/HomePage";
+import  HomePage  from "@/pages/HomePage";
 import { ExplorePage } from "@/pages/ExplorePage";
 import { MintPage } from "@/pages/MintPage";
 import { ProfilePage } from "@/pages/ProfilePage";
