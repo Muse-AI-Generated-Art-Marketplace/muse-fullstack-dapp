@@ -15,6 +15,7 @@ import userRoutes from '@/routes/user'
 import aiRoutes from '@/routes/ai'
 import metadataRoutes from '@/routes/metadata'
 import cacheRoutes from '@/routes/cache'
+import imageOptimizerRoutes from '@/routes/imageOptimizer'
 
 dotenv.config()
 
@@ -53,6 +54,7 @@ app.use('/api/users', userRoutes)
 app.use('/api/ai', aiRoutes)
 app.use('/api/metadata', metadataRoutes)
 app.use('/api/cache', cacheRoutes)
+app.use('/api', imageOptimizerRoutes)
 
 app.use(notFound)
 app.use(errorHandler)

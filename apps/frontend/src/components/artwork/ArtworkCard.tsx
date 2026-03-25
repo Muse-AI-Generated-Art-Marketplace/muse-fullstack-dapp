@@ -1,6 +1,7 @@
-import React from "react";
-import { Button } from "@/components/ui/Button";
-import { Card } from "@/components/ui/Card";
+import React from 'react'
+import { Button } from '@/components/ui/Button'
+import { Card } from '@/components/ui/Card'
+import { OptimizedImage } from '@/components/ui/OptimizedImage'
 
 export interface Artwork {
   id: string;
@@ -49,11 +50,13 @@ export function ArtworkCard({
         return (
           <div className="flex space-x-3">
             <div className="w-16 h-16 bg-gradient-to-br from-primary-100 to-primary-200 rounded-lg flex-shrink-0">
-              <img
+              <OptimizedImage
                 src={artwork.imageUrl}
                 alt={artwork.title}
                 className="w-full h-full object-cover rounded-lg"
-                onError={handleImageError}
+                width={64}
+                height={64}
+                placeholder="blur"
               />
             </div>
             <div className="flex-1 min-w-0">
@@ -76,11 +79,13 @@ export function ArtworkCard({
         return (
           <div className="space-y-4">
             <div className="aspect-square bg-gradient-to-br from-primary-100 to-primary-200 rounded-lg overflow-hidden">
-              <img
+              <OptimizedImage
                 src={artwork.imageUrl}
                 alt={artwork.title}
                 className="w-full h-full object-cover"
-                onError={handleImageError}
+                width={400}
+                height={400}
+                placeholder="blur"
               />
             </div>
 
@@ -135,11 +140,13 @@ export function ArtworkCard({
         return (
           <div className="space-y-4">
             <div className="aspect-square bg-gradient-to-br from-primary-100 to-primary-200 rounded-lg overflow-hidden group-hover:scale-105 transition-transform">
-              <img
+              <OptimizedImage
                 src={artwork.imageUrl}
                 alt={artwork.title}
                 className="w-full h-full object-cover"
-                onError={handleImageError}
+                width={300}
+                height={300}
+                placeholder="blur"
               />
             </div>
 

@@ -80,17 +80,23 @@ export function Navigation({
   }
 
   const renderActions = () => {
-    if (actions) return actions
+    if (actions) {
+      return (
+        <div className={`flex ${mobile ? 'flex-col space-y-4' : 'items-center space-x-4'}`}>
+          {actions}
+        </div>
+      )
+    }
     
     return <WalletConnect />
   }
 
   if (mobile) {
     return (
-      <div className={`bg-white border-b border-secondary-200 ${className}`}>
-        <div className="px-4 py-2 space-y-1">
+      <div className={`bg-white border-b border-secondary-200 overflow-hidden ${className}`}>
+        <div className="px-4 py-3 space-y-1">
           {renderNavigationItems()}
-          <div className="pt-4 pb-2 border-t border-secondary-200">
+          <div className="pt-6 pb-4 border-t border-secondary-200 mt-4">
             {renderActions()}
           </div>
         </div>
@@ -99,15 +105,15 @@ export function Navigation({
   }
 
   return (
-    <nav className={`flex items-center justify-between ${className}`}>
-      <div className="flex items-center space-x-8">
+    <nav className={`flex items-center justify-between py-4 ${className}`}>
+      <div className="flex items-center space-x-12">
         {renderBrand()}
-        <div className="hidden md:flex space-x-8">
+        <div className="hidden md:flex items-center space-x-8">
           {renderNavigationItems()}
         </div>
       </div>
       
-      <div className="flex items-center space-x-4">
+      <div className="flex items-center space-x-6">
         <div className="hidden md:block">
           {renderActions()}
         </div>

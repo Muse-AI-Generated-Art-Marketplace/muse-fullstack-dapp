@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { MintStepper } from '@/components/MintStepper'
 import { ErrorHandler, AppError } from '@/utils/errorHandler'
 import { ErrorDisplay } from '@/components/ErrorDisplay'
+import { OptimizedImage } from '@/components/ui/OptimizedImage'
 
 export function MintPage() {
   const [error, setError] = useState<AppError | null>(null)
