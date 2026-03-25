@@ -17,6 +17,19 @@ export interface Artwork {
   views?: number
 }
 
+export interface UserProfile {
+  address: string
+  username: string
+  bio: string
+  profileImage?: string
+  stats: {
+    created: number
+    collected: number
+    favorites: number
+  }
+  createdAt?: string
+}
+
 export interface ArtworksResponse {
   success: boolean
   data: Artwork[]
@@ -42,6 +55,8 @@ export interface PlatformStats {
 }
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000'
+
+// ─── Artworks ─────────────────────────────────────────────────────────────────
 
 async function fetchArtworks({
   pageParam = 1,
@@ -73,9 +88,7 @@ async function fetchArtworks({
   return data
 }
 
-export function useArtworks(
-  filters: ArtworksFilters = {},
-) {
+export function useArtworks(filters: ArtworksFilters = {}) {
   return useInfiniteQuery<ArtworksResponse, Error>(
     ['artworks', filters] as const,
     ({ pageParam = 1 }) => fetchArtworks({ pageParam: pageParam as number, filters }),
@@ -186,4 +199,53 @@ export async function getArtworkById(id: string): Promise<Artwork> {
   }
 
   return result.data
+}
+
+// ─── User Profile ─────────────────────────────────────────────────────────────
+
+async function fetchUserProfile(): Promise<UserProfile> {
+  const response = await fetch(`${API_BASE_URL}/api/users/profile`)
+  if (!response.ok) {
+    throw new Error(`Failed to fetch user profile (Status: ${response.status})`)
+  }
+  const data = await response.json()
+  if (!data.success) {
+    throw new Error(data?.error?.message || 'Failed to fetch user profile')
+  }
+  return data.data
+}
+
+export function useUserProfile() {
+  return useQuery<UserProfile, Error>({
+    queryKey: ['user', 'profile'],
+    queryFn: fetchUserProfile,
+    staleTime: 5 * 60 * 1000,
+    retry: 1,
+  })
+}
+
+// ─── User Artworks ────────────────────────────────────────────────────────────
+
+async function fetchUserArtworks(creator: string): Promise<Artwork[]> {
+  const params = new URLSearchParams({ limit: '50' })
+  const response = await fetch(`${API_BASE_URL}/api/artworks?${params}`)
+  if (!response.ok) {
+    throw new Error(`Failed to fetch user artworks (Status: ${response.status})`)
+  }
+  const data = await response.json()
+  if (!data.success) {
+    throw new Error(data?.error?.message || 'Failed to fetch user artworks')
+  }
+  // Filter client-side by creator address (backend seed data has creator field)
+  const artworks = data.data as Artwork[]
+  return creator ? artworks.filter((a) => a.creator === creator) : artworks
+}
+
+export function useUserArtworks(creator: string) {
+  return useQuery<Artwork[], Error>({
+    queryKey: ['artworks', 'user', creator],
+    queryFn: () => fetchUserArtworks(creator),
+    staleTime: 2 * 60 * 1000,
+    retry: 1,
+  })
 }
