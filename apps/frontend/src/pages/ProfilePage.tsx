@@ -32,10 +32,10 @@ export function ProfilePage() {
       : displayAddress
 
   return (
-    <div className="container mx-auto px-4 py-8 max-w-6xl">
-      <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
+    <div className="px-4 py-6 sm:py-8 max-w-6xl mx-auto">
+      <div className="grid grid-cols-1 md:grid-cols-4 lg:grid-cols-4 gap-4 sm:gap-6 md:gap-8">
         {/* ── Sidebar ── */}
-        <div className="lg:col-span-1">
+        <div className="col-span-1 md:col-span-1">
           <Card padding="lg" className="text-center">
             <div className="w-24 h-24 bg-gradient-to-br from-primary-100 to-primary-200 rounded-full mx-auto mb-4 flex items-center justify-center">
               {profile?.profileImage ? (
@@ -92,7 +92,7 @@ export function ProfilePage() {
         </div>
 
         {/* ── Main content ── */}
-        <div className="lg:col-span-3">
+        <div className="col-span-1 md:col-span-3">
           <div className="space-y-8">
             {/* Tab bar */}
             <div className="flex items-center space-x-4 mb-6">
@@ -124,13 +124,13 @@ export function ProfilePage() {
             {activeTab === 'created' && (
               <>
                 {artworksLoading ? (
-                  <Grid columns={3} gap="md" responsive={false}>
+                  <Grid columns={3} gap="md" responsive={true}>
                     {Array.from({ length: 6 }).map((_, i) => (
                       <ArtworkCardSkeleton key={i} />
                     ))}
                   </Grid>
                 ) : artworks && artworks.length > 0 ? (
-                  <Grid columns={3} gap="md" responsive={false}>
+                  <Grid columns={1} gap="md" responsive={true}>
                     {artworks.map((artwork) => (
                       <ArtworkCard
                         key={artwork.id}

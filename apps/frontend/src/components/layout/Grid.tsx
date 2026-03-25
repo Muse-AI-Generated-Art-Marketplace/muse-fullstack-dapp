@@ -27,20 +27,20 @@ export function Grid({
   }
   
   const gapClasses = {
-    sm: 'gap-2',
-    md: 'gap-4',
-    lg: 'gap-6'
+    sm: 'gap-2 sm:gap-3',
+    md: 'gap-4 sm:gap-5 md:gap-6',
+    lg: 'gap-6 sm:gap-7 md:gap-8'
   }
 
   const responsiveClasses = responsive
-    ? 'xs:grid-cols-2 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4'
+    ? 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 px-2 sm:px-4'
     : ''
 
   const classes = [
     baseClasses,
     responsive ? responsiveClasses : columnClasses[columns],
     gapClasses[gap],
-    responsive && 'px-4',
+    responsive && responsive || 'px-0',
     className
   ].filter(Boolean).join(' ')
 
