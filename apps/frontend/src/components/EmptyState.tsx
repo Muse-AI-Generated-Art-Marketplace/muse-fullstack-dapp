@@ -1,4 +1,5 @@
 import { Search, Filter, Heart } from 'lucide-react'
+import { Button } from '@/components/ui/Button'
 
 interface EmptyStateProps {
   type: 'no-results' | 'no-artworks' | 'no-favorites'
@@ -19,12 +20,13 @@ export function EmptyState({ type, onClearFilters }: EmptyStateProps) {
           Try adjusting your filters or search terms to find what you're looking for.
         </p>
         {onClearFilters && (
-          <button
+          <Button
             onClick={onClearFilters}
-            className="btn-outline px-6 py-2 touch-manipulation"
+            variant="outline"
+            size="md"
           >
             Clear Filters
-          </button>
+          </Button>
         )}
       </div>
     )

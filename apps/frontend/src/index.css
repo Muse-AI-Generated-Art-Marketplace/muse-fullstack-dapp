@@ -81,11 +81,31 @@
 
   /* Responsive grid improvements */
   .grid-responsive {
-    @apply grid-cols-1 gap-4 px-4;
-    @apply xs:grid-cols-2;
-    @apply md:grid-cols-2;
-    @apply lg:grid-cols-3;
-    @apply xl:grid-cols-4;
+    @apply grid-cols-1 gap-3 px-2;
+    @apply xs:grid-cols-2 xs:gap-4 xs:px-3;
+    @apply sm:grid-cols-2 sm:gap-4 sm:px-4;
+    @apply md:grid-cols-2 md:gap-5;
+    @apply lg:grid-cols-3 lg:gap-5;
+    @apply xl:grid-cols-4 xl:gap-6;
+  }
+
+  /* Mobile text size utilities */
+  .text-mobile-sm {
+    @apply text-xs sm:text-sm;
+  }
+
+  .text-mobile-base {
+    @apply text-sm sm:text-base;
+  }
+
+  .text-mobile-lg {
+    @apply text-base sm:text-lg;
+  }
+
+  /* Prevent overflow on mobile */
+  .overflow-safe {
+    @apply overflow-auto;
+    -webkit-overflow-scrolling: touch;
   }
 
   /* Mobile heading optimizations */

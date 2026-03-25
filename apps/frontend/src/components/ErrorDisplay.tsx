@@ -1,6 +1,7 @@
 import React from 'react'
 import { AlertCircle, RefreshCw, X } from 'lucide-react'
 import { AppError, ErrorHandler } from '@/utils/errorHandler'
+import { Button } from '@/components/ui/Button'
 
 interface ErrorDisplayProps {
   error: AppError | null
@@ -187,12 +188,14 @@ export class ErrorBoundary extends React.Component<
               <p className="text-gray-600 mb-6">
                 {this.state.error.userMessage}
               </p>
-              <button
+              <Button
                 onClick={this.handleRetry}
-                className="btn-primary w-full"
+                variant="primary"
+                size="lg"
+                className="w-full"
               >
                 Try Again
-              </button>
+              </Button>
             </div>
           </div>
         </div>
