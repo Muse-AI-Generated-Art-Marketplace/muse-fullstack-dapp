@@ -1,9 +1,10 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
-
+/* everything else stays the same */
 @layer base {
   * {
     @apply border-secondary-200;
@@ -80,11 +81,31 @@
 
   /* Responsive grid improvements */
   .grid-responsive {
-    @apply grid-cols-1 gap-4 px-4;
-    @apply xs:grid-cols-2;
-    @apply md:grid-cols-2;
-    @apply lg:grid-cols-3;
-    @apply xl:grid-cols-4;
+    @apply grid-cols-1 gap-3 px-2;
+    @apply xs:grid-cols-2 xs:gap-4 xs:px-3;
+    @apply sm:grid-cols-2 sm:gap-4 sm:px-4;
+    @apply md:grid-cols-2 md:gap-5;
+    @apply lg:grid-cols-3 lg:gap-5;
+    @apply xl:grid-cols-4 xl:gap-6;
+  }
+
+  /* Mobile text size utilities */
+  .text-mobile-sm {
+    @apply text-xs sm:text-sm;
+  }
+
+  .text-mobile-base {
+    @apply text-sm sm:text-base;
+  }
+
+  .text-mobile-lg {
+    @apply text-base sm:text-lg;
+  }
+
+  /* Prevent overflow on mobile */
+  .overflow-safe {
+    @apply overflow-auto;
+    -webkit-overflow-scrolling: touch;
   }
 
   /* Mobile heading optimizations */
@@ -209,6 +230,22 @@
     background:
       radial-gradient(ellipse 500px 300px at 30% 60%, rgba(99, 102, 241, 0.10) 0%, transparent 70%),
       radial-gradient(ellipse 400px 250px at 70% 40%, rgba(14, 165, 233, 0.08) 0%, transparent 70%);
+  }
+
+  /* ─── Breadcrumb Navigation ──────────────────────────────────────────── */
+
+  .breadcrumb {
+    @apply py-3;
+  }
+
+  .breadcrumb ol {
+    @apply flex items-center gap-1.5 text-sm;
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  .breadcrumb ol::-webkit-scrollbar {
+    display: none;
   }
 }
 

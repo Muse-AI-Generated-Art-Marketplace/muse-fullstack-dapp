@@ -20,6 +20,8 @@ export function Loading({
   if (variant === 'spinner') {
     return (
       <div
+        role="status"
+        aria-label="Loading"
         className={`animate-spin rounded-full border-2 border-primary-600 border-t-transparent ${sizeClasses[size]} ${className}`}
       />
     )
@@ -28,6 +30,9 @@ export function Loading({
   if (variant === 'skeleton') {
     return (
       <div
+        role="status"
+        aria-label="Loading content"
+        aria-busy="true"
         className={`bg-secondary-200 rounded-md animate-pulse ${className}`}
       />
     )
@@ -36,6 +41,9 @@ export function Loading({
   if (variant === 'pulse') {
     return (
       <div
+        role="status"
+        aria-label="Refreshing"
+        aria-busy="true"
         className={`bg-secondary-100 rounded-md animate-pulse ${className}`}
       />
     )

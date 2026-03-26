@@ -6,6 +6,7 @@ import { Grid } from '@/components/layout/Grid'
 import { ArtworkCard } from '@/components/artwork/ArtworkCard'
 import { ArtworkCardSkeleton } from '@/components/ArtworkCardSkeleton'
 import { EmptyState } from '@/components/EmptyState'
+import { Breadcrumb } from '@/components/ui/Breadcrumb'
 import { useUserProfile, useUserArtworks } from '@/services/artworkService'
 import { useStellar } from '@/hooks/useStellar'
 
@@ -33,6 +34,10 @@ export function ProfilePage() {
 
   return (
     <div className="container mx-auto px-4 py-8 max-w-6xl">
+      <Breadcrumb items={[
+        { label: 'Home', href: '/' },
+        { label: 'Profile' },
+      ]} />
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
         {/* ── Sidebar ── */}
         <div className="lg:col-span-1">

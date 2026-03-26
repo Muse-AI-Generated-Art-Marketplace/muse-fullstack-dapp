@@ -1,6 +1,7 @@
 import { useParams } from 'react-router-dom'
 import { useArtworkMetadata } from '@/hooks/useMetadata'
 import { MetaTags } from '@/components/MetaTags'
+import { Breadcrumb } from '@/components/ui/Breadcrumb'
 
 export function ArtworkPage() {
   const { id } = useParams<{ id: string }>()
@@ -47,6 +48,11 @@ export function ArtworkPage() {
       <div className="min-h-screen bg-background">
         <div className="mobile-section">
           <div className="max-w-6xl mx-auto">
+            <Breadcrumb items={[
+              { label: 'Home', href: '/' },
+              { label: 'Explore', href: '/explore' },
+              { label: artworkData.title || 'Artwork' },
+            ]} />
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
               {/* Artwork Image */}
               <div className="aspect-square bg-gradient-to-br from-primary-100 to-primary-200 rounded-lg overflow-hidden">
@@ -130,3 +136,4 @@ export function ArtworkPage() {
     </>
   )
 }
+

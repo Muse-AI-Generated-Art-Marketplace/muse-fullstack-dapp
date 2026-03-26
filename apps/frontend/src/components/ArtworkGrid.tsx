@@ -64,10 +64,10 @@ export function ArtworkGrid({
         {artworks.map((artwork) => (
           <ArtworkCard
             key={artwork.id}
-            artwork={artwork}
+            artwork={artwork as any}
             variant={cardVariant}
-            onPurchase={onPurchase}
-            onView={onView}
+            onPurchase={onPurchase as any}
+            onView={onView as any}
             showPrice={showPrice}
             showCreator={showCreator}
           />

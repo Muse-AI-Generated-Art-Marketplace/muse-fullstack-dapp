@@ -17,7 +17,9 @@
     "@stellar/freighter-api": "^1.3.0",
     "@tanstack/react-query": "^4.32.6",
     "clsx": "^2.0.0",
-    "lucide-react": "^0.263.1"
+    "lucide-react": "^0.263.1",
+    "react-intersection-observer": "^9.5.2",
+    "webp-hero": "^0.0.2"
   },
   "devDependencies": {
     "@types/react": "^18.2.15",
