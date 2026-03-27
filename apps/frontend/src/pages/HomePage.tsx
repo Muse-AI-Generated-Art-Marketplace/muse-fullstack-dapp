@@ -1,4 +1,3 @@
-import React from 'react'
 import { ActivityFeed } from '@/components/ActivityFeed'
 import { Button } from '@/components/ui/Button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
@@ -24,9 +23,6 @@ export function HomePage() {
         setTimeout(() => showFollowNotification('Charlie'), 5000)
     }
 
-import { Compass, PlusSquare, TrendingUp } from 'lucide-react'
-
-export function HomePage() {
     return (
         <div className="min-h-screen bg-gray-50">
             {/* Hero Section */}

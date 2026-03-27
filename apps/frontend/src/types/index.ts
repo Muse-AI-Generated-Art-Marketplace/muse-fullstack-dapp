@@ -191,7 +191,7 @@ export interface AppError {
   userMessage: string
   isRecoverable: boolean
   statusCode?: number
-  details?: Record<string, any>
+  details?: unknown
   originalError?: Error | unknown
   timestamp?: string
 }
