@@ -9,7 +9,11 @@
     "start": "node dist/index.js",
     "test": "jest",
     "lint": "eslint src --ext .ts",
-    "lint:fix": "eslint src --ext .ts --fix"
+    "lint:fix": "eslint src --ext .ts --fix",
+    "migrate": "tsx migrationScripts/run.ts up",
+    "migrate:rollback": "tsx migrationScripts/run.ts down",
+    "migrate:status": "tsx migrationScripts/run.ts status",
+    "migrate:run": "tsx migrationScripts/run.ts run"
   },
   "dependencies": {
     "@types/jsonwebtoken": "^9.0.10",
