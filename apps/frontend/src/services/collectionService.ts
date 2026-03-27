@@ -36,7 +36,10 @@ export const collectionService = {
 
       return await response.json()
     } catch (error) {
-      throw ErrorHandler.handle(error)
+      throw ErrorHandler.handleError(error, {
+        context: 'collectionService.getUserCollections',
+        userMessage: 'Failed to load your collections. Please try again.',
+      })
     }
   },
 

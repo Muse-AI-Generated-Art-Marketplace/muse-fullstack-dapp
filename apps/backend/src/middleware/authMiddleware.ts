@@ -42,7 +42,7 @@ export const authenticate = async (req: AuthRequest, res: Response, next: NextFu
     }
     next()
   } catch (error) {
-    logger.error('JWT Verification failed:', error)
+    logger.error('JWT Verification failed', { errorMessage: error instanceof Error ? error.message : String(error) })
     next(createError('Invalid or expired token', 401))
   }
 }
@@ -69,7 +69,7 @@ export const optionalAuthenticate = async (req: AuthRequest, res: Response, next
     next()
   } catch (error) {
     // If token is invalid, we don't fail, just continue as anonymous
-    logger.debug('Optional JWT Verification failed:', error)
+    logger.debug('Optional JWT Verification failed', { errorMessage: error instanceof Error ? error.message : String(error) })
     next()
   }
 }

@@ -28,11 +28,11 @@ export const getArtworkMetadata = async (req: Request, res: Response, next: Next
       twitterCard: 'summary_large_image',
       twitterSite: '@museartmarket',
       additionalTags: {
-        'art:category': artwork.metadata.category,
+        'art:category': artwork.metadata?.category,
         'art:price': `${artwork.price} ${artwork.currency}`,
         'art:creator': artwork.creator,
-        'art:ai_model': artwork.metadata.attributes?.aiModel,
-        'art:prompt': artwork.metadata.attributes?.prompt,
+        'art:ai_model': artwork.metadata?.attributes?.aiModel,
+        'art:prompt': artwork.metadata?.attributes?.prompt,
       }
     }
 
@@ -41,7 +41,7 @@ export const getArtworkMetadata = async (req: Request, res: Response, next: Next
       data: metadata,
     })
   } catch (error) {
-    logger.error(`Failed to fetch artwork metadata for ${req.params.id}:`, error)
+    logger.error(`Failed to fetch artwork metadata for ${req.params.id}`, { errorMessage: error instanceof Error ? error.message : String(error) })
     next(createError('Failed to fetch artwork metadata', 500))
   }
 }
