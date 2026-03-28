@@ -92,7 +92,7 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
   }
 
   const markAsRead = (id: string) => {
-    setNotifications(prev => prev.map(n => 
+    setNotifications(prev => prev.map(n =>
       n.id === id ? { ...n, read: true } : n
     ))
   }

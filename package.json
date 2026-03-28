@@ -18,7 +18,9 @@
     "build:web": "npm run build --workspace=muse-web",
     "test": "npm run test --workspaces",
     "lint": "npm run lint --workspaces",
-    "clean": "npm run clean --workspaces && rm -rf node_modules"
+    "clean": "npm run clean --workspaces && rm -rf node_modules",
+    "validate-env": "node scripts/validate-env.js",
+    "validate-env:backend": "node -e \"require('dotenv').config({path: 'apps/backend/.env'}); console.log('Backend env loaded')\""
   },
   "devDependencies": {
     "concurrently": "^8.2.2",

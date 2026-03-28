@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, createContext, useContext } from 'react'
 import type React from 'react'
 import * as StellarSdk from '@stellar/stellar-sdk'
-import { ErrorHandler, AppError } from '@/utils/errorHandler'
+import { ErrorHandler} from '@/utils/errorHandler'
 import { StellarAccount, StellarTransaction } from '@/types'
 
 export interface FreighterWalletState {
@@ -114,7 +114,7 @@ export function useStellar(): UseStellarReturn {
   })
 
   const server = new StellarSdk.SorobanRpc.Server(
-    network === 'testnet' 
+    network === 'testnet'
       ? 'https://soroban-testnet.stellar.org'
       : 'https://soroban.stellar.org'
   )
@@ -164,7 +164,7 @@ export function useStellar(): UseStellarReturn {
 
       // Get public key from Freighter
       const publicKey = await getFreighterPublicKey()
-      
+
       if (publicKey) {
         setAccount({
           publicKey,
@@ -183,7 +183,7 @@ export function useStellar(): UseStellarReturn {
           const balance = accountObj.balances.find(
             (b: { asset_type: string }) => b.asset_type === 'native'
           )?.balance || '0'
-          
+
           setAccount((prev: StellarAccount) => ({
             ...prev,
             balance,
@@ -203,12 +203,12 @@ export function useStellar(): UseStellarReturn {
     } catch (error) {
       const appError = error instanceof AppError ? error : ErrorHandler.handle(error)
       console.error('Failed to connect wallet:', appError.userMessage)
-      
+
       setAccount({
         publicKey: '',
         isConnected: false,
       })
-      
+
       throw appError
     } finally {
       setIsLoading(false)
@@ -236,7 +236,7 @@ export function useStellar(): UseStellarReturn {
       if (!xdr || xdr.trim() === '') {
         throw new Error('Transaction XDR is required')
       }
-      
+
       if (!networkPassphrase || networkPassphrase.trim() === '') {
         throw new Error('Network passphrase is required')
       }
@@ -258,11 +258,11 @@ export function useStellar(): UseStellarReturn {
           isRecoverable: true,
         })
       }
-      
+
       const result = await window.freighter.signTransaction(xdr, {
         networkPassphrase,
       })
-      
+
       if (!result) {
         throw ErrorHandler.handle({
           code: 'SIGNATURE_FAILED',
@@ -271,7 +271,7 @@ export function useStellar(): UseStellarReturn {
           isRecoverable: true,
         })
       }
-      
+
       return result
     } catch (error) {
       const appError = error instanceof AppError ? error : ErrorHandler.handle(error)
@@ -287,7 +287,7 @@ export function useStellar(): UseStellarReturn {
       if (!transaction) {
         throw new Error('Transaction is required')
       }
-      
+
       const networkPassphrase = network === 'testnet'
         ? StellarSdk.Networks.TESTNET
         : StellarSdk.Networks.PUBLIC
@@ -308,11 +308,11 @@ export function useStellar(): UseStellarReturn {
         try {
           await Promise.race([
             server.getTransaction(result.hash),
-            new Promise<never>((_, reject) => 
+            new Promise<never>((_, reject) =>
               setTimeout(() => reject(new Error('Transaction confirmation timeout')), 30000)
             )
           ])
-          
+
           return {
             hash: result.hash,
             status: 'success',
@@ -373,7 +373,7 @@ export function useStellar(): UseStellarReturn {
       const balance = accountObj.balances.find(
         (b: { asset_type: string }) => b.asset_type === 'native'
       )?.balance || '0'
-      
+
       setAccount((prev: StellarAccount) => ({
         ...prev,
         balance,
@@ -389,7 +389,7 @@ export function useStellar(): UseStellarReturn {
     const initializeConnection = async () => {
       try {
         const isInstalled = await checkFreighterInstalled()
-        
+
         if (isInstalled) {
           const publicKey = await getFreighterPublicKey()
           if (publicKey) {
@@ -440,7 +440,7 @@ export function useStellar(): UseStellarReturn {
 // Provider component for global wallet state
 export function StellarProvider({ children }: { children: React.ReactNode }): React.ReactElement {
   const stellar = useStellar()
-  
+
   const contextValue: StellarContextType = {
     account: stellar.account,
     network: stellar.network,

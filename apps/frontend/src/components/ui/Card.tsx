@@ -1,19 +1,30 @@
 import * as React from "react"
-
 import { cn } from "@/lib/utils"
 
-function Card({ className, ...props }: React.ComponentProps<"div">) {
+interface CardProps extends React.ComponentProps<"div"> {
+  padding?: "sm" | "md" | "lg"  // customize according to your design system
+}
+
+function Card({ className, padding = "md", ...props }: CardProps) {
+  const paddingClass = {
+    sm: "py-2",
+    md: "py-6",
+    lg: "py-10",
+  }[padding]
+
   return (
     <div
       data-slot="card"
       className={cn(
-        "bg-card text-card-foreground flex flex-col gap-6 rounded-xl border py-6 shadow-sm",
+        "bg-card text-card-foreground flex flex-col gap-6 rounded-xl border shadow-sm",
+        paddingClass,
         className
       )}
       {...props}
     />
   )
 }
+
 
 function CardHeader({ className, ...props }: React.ComponentProps<"div">) {
   return (
