@@ -8,10 +8,14 @@ import userRoutes from './routes/user'
 import aiRoutes from './routes/ai'
 import metadataRoutes from './routes/metadata'
 import cacheRoutes from './routes/cache'
+import cacheManagementRoutes from './routes/cacheManagement'
 import imageOptimizerRoutes from './routes/imageOptimizer'
 import favoriteRoutes from './routes/favorites'
+import apiKeyRoutes from './routes/apiKeys'
+import jobRoutes from './routes/jobs'
 import { notFoundHandler } from './middleware/notFound'
 import { errorHandler } from './middleware/errorHandler'
+import { jobQueueService } from './services/jobQueueService'
 
 // Load environment variables
 dotenv.config()
@@ -61,8 +65,11 @@ app.use('/api/user', userRoutes)
 app.use('/api/ai', aiRoutes)
 app.use('/api/metadata', metadataRoutes)
 app.use('/api/cache', cacheRoutes)
+app.use('/api/cache', cacheManagementRoutes)
 app.use('/api/images', imageOptimizerRoutes)
 app.use('/api/favorites', favoriteRoutes)
+app.use('/api/keys', apiKeyRoutes)
+app.use('/api/jobs', jobRoutes)
 
 // Error handling
 app.use(notFoundHandler)
@@ -71,8 +78,17 @@ app.use(errorHandler)
 // Database connection and server start
 mongoose
   .connect(MONGODB_URI)
-  .then(() => {
+  .then(async () => {
     console.log('Connected to MongoDB')
+    
+    // Initialize job queue service
+    try {
+      await jobQueueService.initialize()
+      console.log('Job queue service initialized')
+    } catch (error) {
+      console.error('Failed to initialize job queue service:', error)
+    }
+    
     app.listen(PORT, () => {
       console.log(`Server running on port ${PORT}`)
     })
@@ -81,5 +97,34 @@ mongoose
     console.error('MongoDB connection error:', error)
     process.exit(1)
   })
+
+// Graceful shutdown
+process.on('SIGTERM', async () => {
+  console.log('SIGTERM received, shutting down gracefully')
+  
+  try {
+    await jobQueueService.shutdown()
+    await mongoose.connection.close()
+    console.log('Graceful shutdown completed')
+    process.exit(0)
+  } catch (error) {
+    console.error('Error during shutdown:', error)
+    process.exit(1)
+  }
+})
+
+process.on('SIGINT', async () => {
+  console.log('SIGINT received, shutting down gracefully')
+  
+  try {
+    await jobQueueService.shutdown()
+    await mongoose.connection.close()
+    console.log('Graceful shutdown completed')
+    process.exit(0)
+  } catch (error) {
+    console.error('Error during shutdown:', error)
+    process.exit(1)
+  }
+})
 
 export default app

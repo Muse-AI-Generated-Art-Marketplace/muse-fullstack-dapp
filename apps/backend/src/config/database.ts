@@ -26,11 +26,22 @@ export class DatabaseConnection {
       const mongoUri = process.env.MONGODB_URI || process.env.DATABASE_URL || 'mongodb://localhost:27017/muse'
       
       await mongoose.connect(mongoUri, {
-        maxPoolSize: 10,
-        serverSelectionTimeoutMS: 5000,
-        socketTimeoutMS: 45000,
-        bufferCommands: false,
-        bufferMaxEntries: 0
+        // Connection pooling configuration
+        maxPoolSize: 50, // Maximum number of sockets in the connection pool
+        minPoolSize: 5,  // Minimum number of sockets in the connection pool
+        maxIdleTimeMS: 30000, // Close connections after 30 seconds of inactivity
+        serverSelectionTimeoutMS: 5000, // How long to try selecting a server before giving up
+        socketTimeoutMS: 45000, // How long a send or receive on a socket can take before timing out
+        bufferCommands: false, // Disable mongoose buffering
+        bufferMaxEntries: 0, // Disable mongoose buffering
+        waitQueueTimeoutMS: 10000, // How long to wait for a connection before timing out
+        retryWrites: true, // Retry write operations if they fail
+        retryReads: true, // Retry read operations if they fail
+        readPreference: 'primary', // Read from primary by default
+        writeConcern: {
+          w: 'majority', // Write to majority of replica set members
+          j: true // Ensure writes are written to journal
+        }
       })
 
       this.isConnected = true
@@ -95,6 +106,33 @@ export class DatabaseConnection {
         status: 'unhealthy'
       }
     }
+  }
+
+  public getConnectionPoolStats() {
+    const poolStats = {
+      readyState: mongoose.connection.readyState,
+      host: mongoose.connection.host,
+      port: mongoose.connection.port,
+      name: mongoose.connection.name,
+      poolSize: 0,
+      maxPoolSize: 50,
+      minPoolSize: 5
+    }
+
+    // Get detailed pool statistics if available
+    if (mongoose.connection.db) {
+      const admin = mongoose.connection.db.admin()
+      try {
+        const serverStatus = admin.serverStatus()
+        if (serverStatus && serverStatus.connections) {
+          poolStats.poolSize = serverStatus.connections.current || 0
+        }
+      } catch (error) {
+        logger.warn('Could not fetch pool statistics:', error)
+      }
+    }
+
+    return poolStats
   }
 }
 
