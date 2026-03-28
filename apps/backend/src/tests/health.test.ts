@@ -27,6 +27,21 @@ describe('Health Check Endpoints', () => {
       expect(summary).toHaveProperty('unhealthy')
       expect(summary).toHaveProperty('degraded')
     })
+
+    it('should respond to CORS preflight OPTIONS with allowed headers and methods', async () => {
+      const origin = 'http://localhost:3000'
+
+      const response = await request(app)
+        .options('/health')
+        .set('Origin', origin)
+        .set('Access-Control-Request-Method', 'GET')
+        .set('Access-Control-Request-Headers', 'Content-Type, Authorization')
+        .expect(204)
+
+      expect(response.header['access-control-allow-origin']).toBe(origin)
+      expect(response.header['access-control-allow-methods']).toEqual(expect.stringContaining('GET'))
+      expect(response.header['access-control-allow-headers']).toEqual(expect.any(String))
+    })
   })
 
   describe('GET /ready', () => {
