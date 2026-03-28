@@ -1,7 +1,7 @@
-import { useState, useEffect, useCallback, createContext, useContext } from 'react'
-import type React from 'react'
+import React, { useState, useEffect, useCallback, createContext, useContext } from 'react'
 import * as StellarSdk from '@stellar/stellar-sdk'
-import { ErrorHandler, AppError } from '@/utils/errorHandler'
+import { ErrorHandler } from '@/utils/errorHandler'
+import type { AppError } from '@/utils/errorHandler'
 import { StellarAccount, StellarTransaction } from '@/types'
 
 export interface FreighterWalletState {
@@ -449,9 +449,9 @@ export function StellarProvider({ children }: { children: React.ReactNode }): Re
     setNetwork: stellar.setNetwork,
   }
 
-  return (
-    <StellarContext.Provider value={contextValue}>
-      {children}
-    </StellarContext.Provider>
+  return React.createElement(
+    StellarContext.Provider,
+    { value: contextValue },
+    children
   )
 }
