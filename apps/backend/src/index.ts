@@ -24,6 +24,7 @@ import healthService from '@/services/healthService'
 import cacheService from '@/services/cacheService'
 import { jobQueueService } from '@/services/jobQueueService'
 import { createLogger } from '@/utils/logger'
+import logsRoute from "./routes/logs";
 
 dotenv.config()
 
@@ -57,6 +58,7 @@ export function createApp() {
   app.use(compression())
   app.use(express.json({ limit: '10mb' }))
   app.use(express.urlencoded({ extended: true }))
+  app.use("/logs", logsRoute);
 
   // ── Request Tracing ──────────────────────────────────────────────────────────
   app.use(requestContext)

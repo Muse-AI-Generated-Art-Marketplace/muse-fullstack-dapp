@@ -7,6 +7,34 @@ import App from "./App";
 import "./index.css";
 import "./i18n";
 import { NotificationProvider } from "./contexts/NotificationContext";
+import ErrorBoundary from "./components/ErrorBoundary";
+import { logError } from "./services/errorLogger";
+
+// Runtime JS errors
+window.onerror = (
+  message: string | Event,
+  source?: string,
+  lineno?: number,
+  colno?: number,
+  error?: Error
+) => {
+  logError({
+    message: typeof message === "string" ? message : "Unknown error",
+    source,
+    lineno,
+    colno,
+    stack: error?.stack,
+  });
+};
+
+// Unhandled promises
+window.onunhandledrejection = (event: PromiseRejectionEvent) => {
+  logError({
+    message:
+      event.reason?.message || "Unhandled Promise Rejection",
+    stack: event.reason?.stack,
+  });
+};
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -23,7 +51,9 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
       <QueryClientProvider client={queryClient}>
         <NotificationProvider>
           <BrowserRouter>
-            <App />
+            <ErrorBoundary>
+              <App />
+            </ErrorBoundary>
           </BrowserRouter>
         </NotificationProvider>
       </QueryClientProvider>
