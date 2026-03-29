@@ -23,6 +23,7 @@ export function HomePage() {
     setTimeout(() => showFollowNotification('Charlie'), 5000)
   }
 
+
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Hero Section */}
@@ -54,6 +55,7 @@ export function HomePage() {
               </Button>
             </div>
           </div>
+
         </div>
       </section>
 

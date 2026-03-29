@@ -129,25 +129,12 @@ ArtworkSchema.virtual('favorites', {
 ArtworkSchema.pre('deleteOne', { document: true, query: false }, async function() {
   const artworkId = this._id
   
-  // Delete related transactions
   await mongoose.model('Transaction').deleteMany({ artwork: artworkId })
-  
-  // Delete related bids
   await mongoose.model('Bid').deleteMany({ artwork: artworkId })
-  
-  // Delete related auction
   await mongoose.model('Auction').deleteOne({ artwork: artworkId })
-  
-  // Delete related comments
   await mongoose.model('Comment').deleteMany({ artwork: artworkId })
-  
-  // Delete related likes
   await mongoose.model('Like').deleteMany({ artwork: artworkId })
-  
-  // Delete related favorites
   await mongoose.model('Favorite').deleteMany({ artwork: artworkId })
-  
-  // Remove from collections
   await mongoose.model('Collection').updateMany(
     { artworks: artworkId },
     { $pull: { artworks: artworkId } }
