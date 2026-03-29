@@ -23,6 +23,9 @@ import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import { NotificationSettings } from '@/components/Notifications/NotificationSettings'
+import { ErrorDisplay } from '@/components/ErrorDisplay'
+import { useErrorContext } from '@/contexts/ErrorContext'
+import { ErrorHandler, type AppError } from '@/utils/errorHandler'
 import { cn } from '@/utils/cn'
 
 const defaultSettings: UserSettings = {
@@ -86,10 +89,12 @@ const defaultSettings: UserSettings = {
 }
 
 export function UserSettingsPage() {
+  const { showError } = useErrorContext()
   const [settings, setSettings] = useState<UserSettings>(defaultSettings)
   const [activeTab, setActiveTab] = useState<string>('profile')
   const [isSaving, setIsSaving] = useState(false)
   const [saveMessage, setSaveMessage] = useState<string>('')
+  const [saveError, setSaveError] = useState<AppError | null>(null)
 
   const tabs = [
     { id: 'profile', label: 'Profile', icon: User },
@@ -102,13 +107,32 @@ export function UserSettingsPage() {
   const handleSave = async () => {
     setIsSaving(true)
     setSaveMessage('')
+    setSaveError(null)
 
-    // Simulate API call
-    await new Promise(resolve => setTimeout(resolve, 1500))
+    try {
+      if (!settings.profile.username.trim()) {
+        throw ErrorHandler.createError(
+          'VALIDATION_ERROR',
+          'Username is required before saving settings.',
+          400
+        )
+      }
 
-    setIsSaving(false)
-    setSaveMessage('Settings saved successfully!')
-    setTimeout(() => setSaveMessage(''), 3000)
+      // Simulate API call
+      await new Promise(resolve => setTimeout(resolve, 1500))
+
+      setSaveMessage('Settings saved successfully!')
+      setTimeout(() => setSaveMessage(''), 3000)
+    } catch (error) {
+      const appError = ErrorHandler.handleError(error, {
+        context: 'UserSettingsPage.handleSave',
+        userMessage: 'Could not save your settings. Please fix any issues and try again.',
+      })
+      setSaveError(appError)
+      showError(appError)
+    } finally {
+      setIsSaving(false)
+    }
   }
 
   const updateSettings = (section: keyof UserSettings, updates: any) => {
@@ -149,6 +173,17 @@ export function UserSettingsPage() {
         <h1 className="text-3xl font-bold text-secondary-900 mb-2">Settings</h1>
         <p className="text-secondary-600">Manage your account settings and preferences</p>
       </div>
+
+      {saveError && (
+        <ErrorDisplay
+          error={saveError}
+          onRetry={handleSave}
+          onDismiss={() => setSaveError(null)}
+          showRetry
+          showDismiss
+          className="mb-4"
+        />
+      )}
 
       <div className="flex flex-col lg:flex-row gap-8">
         {/* Sidebar Navigation */}

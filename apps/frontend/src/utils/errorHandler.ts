@@ -74,7 +74,7 @@ export class ErrorHandler {
       return new AppError({
         code: 'UNKNOWN_ERROR',
         message: error,
-        userMessage: 'An unexpected error occurred. Please try again.',
+        userMessage: "An unexpected error occurred. Please try again.",
         isRecoverable: true,
       })
     }
@@ -117,7 +117,8 @@ export class ErrorHandler {
       return new AppError({
         code: 'NETWORK_ERROR',
         message: error.message,
-        userMessage: 'Network connection failed. Please check your internet connection and try again.',
+        userMessage:
+          "Network connection failed. Please check your internet connection and try again.",
         isRecoverable: true,
       })
     }
@@ -152,7 +153,7 @@ export class ErrorHandler {
     return new AppError({
       code: 'GENERAL_ERROR',
       message: error.message,
-      userMessage: 'Something went wrong. Please try again.',
+      userMessage: "Something went wrong. Please try again.",
       isRecoverable: true,
     })
   }
@@ -198,13 +199,13 @@ export const queryErrorHandler = (error: unknown): AppError => {
 /** Wraps an async function with unified error handling */
 export const withErrorHandling = async <T>(
   asyncFn: () => Promise<T>,
-  onError?: (error: AppError) => void
+  onError?: (error: AppError) => void,
 ): Promise<T | null> => {
   try {
-    return await asyncFn()
+    return await asyncFn();
   } catch (error) {
-    const appError = ErrorHandler.handle(error)
-    onError?.(appError)
-    return null
+    const appError = ErrorHandler.handle(error);
+    onError?.(appError);
+    return null;
   }
-}
+};

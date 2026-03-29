@@ -2,36 +2,87 @@ import { useParams } from 'react-router-dom'
 import { useArtworkMetadata } from '@/hooks/useMetadata'
 import { MetaTags, buildArtworkSchema } from '@/components/MetaTags'
 import { Breadcrumb } from '@/components/ui/Breadcrumb'
-import { useTranslation } from 'react-i18next'
+import { ErrorDisplay } from '@/components/ErrorDisplay'
+import { useErrorContext } from '@/contexts/ErrorContext'
+import { ErrorHandler } from '@/utils/errorHandler'
+
+interface ArtworkMetadataPayload {
+  title: string
+  description: string
+  image: string
+  url: string
+  additionalTags?: Record<string, string>
+}
+
+interface ArtworkMetadataResponse {
+  success: boolean
+  data: ArtworkMetadataPayload
+}
 
 export function ArtworkPage() {
-  const { t } = useTranslation()
+  const { showError } = useErrorContext()
   const { id } = useParams<{ id: string }>()
-  const { data: metadata, isLoading, error } = useArtworkMetadata(id || '')
+  const { data: metadata, isLoading, error, refetch } = useArtworkMetadata(id || '')
+  const metadataResponse = metadata as ArtworkMetadataResponse | undefined
+
+  const appError = error ? ErrorHandler.handle(error) : null
 
   if (isLoading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600 mx-auto mb-4"></div>
-          <p className="text-secondary-600">{t('artwork.loading')}</p>
+          <p className="text-secondary-600">Loading artwork...</p>
         </div>
       </div>
     )
   }
 
-  if (error || !metadata?.success) {
+  if (appError || !metadataResponse?.success) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="text-center">
-          <h1 className="text-2xl font-bold text-secondary-900 mb-2">{t('artwork.not_found')}</h1>
-          <p className="text-secondary-600">{t('artwork.not_found_desc')}</p>
+        <div className="max-w-md w-full px-4">
+          <ErrorDisplay
+            error={
+              appError ||
+              ErrorHandler.createError(
+                'NOT_FOUND',
+                'Artwork not found or unavailable.',
+                404
+              )
+            }
+            onRetry={async () => {
+              await refetch()
+            }}
+            showRetry
+            showDismiss={false}
+            className="mb-4"
+          />
+          <div className="flex gap-2 justify-center">
+            <button
+              onClick={async () => {
+                await refetch()
+              }}
+              className="btn-primary text-mobile-sm px-4 py-2"
+            >
+              Try Again
+            </button>
+            <button
+              onClick={() => {
+                showError('Artwork could not be loaded. Redirecting to explore can help you find available items.')
+                window.location.href = '/explore'
+              }}
+              className="btn-outline text-mobile-sm px-4 py-2"
+            >
+              Go to Explore
+            </button>
+          </div>
         </div>
       </div>
     )
   }
 
-  const artworkData = metadata.data
+  const artworkData = metadataResponse.data
 
   return (
     <>
@@ -52,14 +103,14 @@ export function ArtworkPage() {
           currency: artworkData.additionalTags?.currency || 'XLM',
         })}
       />
-      
+
       <div className="min-h-screen bg-background">
         <div className="mobile-section">
           <div className="max-w-6xl mx-auto">
             <Breadcrumb items={[
-              { label: t('artwork.breadcrumb_home'), href: '/' },
-              { label: t('artwork.breadcrumb_explore'), href: '/explore' },
-              { label: artworkData.title || t('artwork.breadcrumb_artwork') },
+              { label: 'Home', href: '/' },
+              { label: 'Explore', href: '/explore' },
+              { label: artworkData.title || 'Artwork' },
             ]} />
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
               {/* Artwork Image */}
@@ -79,7 +130,7 @@ export function ArtworkPage() {
                 <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-primary-100 to-primary-200" style={{ display: 'none' }}>
                   <div className="text-center">
                     <div className="text-4xl mb-2">🎨</div>
-                    <p className="text-secondary-600">{t('artwork.breadcrumb_artwork')}</p>
+                    <p className="text-secondary-600">Artwork</p>
                   </div>
                 </div>
               </div>
@@ -93,7 +144,7 @@ export function ArtworkPage() {
 
                 <div className="space-y-4">
                   <div className="bg-secondary-50 p-4 rounded-lg">
-                    <h3 className="font-semibold text-secondary-900 mb-2">{t('artwork.details')}</h3>
+                    <h3 className="font-semibold text-secondary-900 mb-2">Details</h3>
                     <dl className="space-y-2">
                       {Object.entries((artworkData.additionalTags as Record<string, string>) || {}).map(([key, value]) => (
                         <div key={key} className="flex justify-between">
@@ -107,7 +158,7 @@ export function ArtworkPage() {
                   </div>
 
                   <div className="bg-primary-50 p-4 rounded-lg">
-                    <h3 className="font-semibold text-primary-900 mb-2">{t('artwork.share_title')}</h3>
+                    <h3 className="font-semibold text-primary-900 mb-2">Share this artwork</h3>
                     <div className="flex space-x-2">
                       <button
                         onClick={() => {
@@ -120,18 +171,18 @@ export function ArtworkPage() {
                           } else {
                             // Fallback: copy to clipboard
                             navigator.clipboard.writeText(artworkData.url)
-                            alert(t('artwork.link_copied'))
+                            alert('Link copied!')
                           }
                         }}
                         className="btn-primary text-mobile-sm px-4 py-2 touch-manipulation"
                       >
-                        {t('artwork.share_action')}
+                        Share
                       </button>
                       <button
                         onClick={() => window.open(`https://twitter.com/intent/tweet?text=${encodeURIComponent(`${artworkData.title} - ${artworkData.description}`)}&url=${encodeURIComponent(artworkData.url)}`, '_blank')}
                         className="btn-outline text-mobile-sm px-4 py-2 touch-manipulation"
                       >
-                        {t('artwork.tweet_action')}
+                        Tweet
                       </button>
                     </div>
                   </div>

@@ -2,14 +2,17 @@ import { useState, type ReactNode } from 'react'
 import { Settings, Heart, ShoppingBag, Library, Clock3, Sparkles } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
-import {Grid} from '@/components/layout/Grid'
+import { Grid } from '@/components/layout/Grid'
 import { ArtworkCard } from '@/components/artwork/ArtworkCard'
 import { ArtworkCardSkeleton } from '@/components/ArtworkCardSkeleton'
 import { EmptyState } from '@/components/EmptyState'
 import { Breadcrumb } from '@/components/ui/Breadcrumb'
+import { ErrorDisplay } from '@/components/ErrorDisplay'
 import { useUserProfile, useUserArtworks, useUserCollection, useUserTransactions } from '@/services/artworkService'
 import { useStellar } from '@/hooks/useStellar'
 import { useFavorites } from '@/hooks/useFavorites'
+import { useErrorContext } from '@/contexts/ErrorContext'
+import { ErrorHandler } from '@/utils/errorHandler'
 import { Artwork } from '@/types'
 
 type ActiveTab = 'created' | 'collection' | 'favorites' | 'activity'
@@ -23,15 +26,18 @@ const activityLabel: Record<string, string> = {
 
 export function ProfilePage() {
   const [activeTab, setActiveTab] = useState<ActiveTab>('created')
+  const { showError } = useErrorContext()
 
   const { account } = useStellar()
-  const { data: profile, isLoading: profileLoading } = useUserProfile()
+  const { data: profile, isLoading: profileLoading, error: profileError, refetch: refetchProfile } = useUserProfile()
   const userAddress = account.publicKey || profile?.address || ''
 
-  const { data: artworks, isLoading: artworksLoading } = useUserArtworks(userAddress)
-  const { data: collection, isLoading: collectionLoading } = useUserCollection(userAddress)
-  const { data: transactions, isLoading: transactionsLoading } = useUserTransactions(userAddress)
-  const { favorites, isLoading: favoritesLoading, toggleFavorite } = useFavorites()
+  const { data: artworks, isLoading: artworksLoading, error: artworksError, refetch: refetchArtworks } = useUserArtworks(userAddress)
+  const { data: collection, isLoading: collectionLoading, error: collectionError, refetch: refetchCollection } = useUserCollection(userAddress)
+  const { data: transactions, isLoading: transactionsLoading, error: transactionsError, refetch: refetchTransactions } = useUserTransactions(userAddress)
+  const { favorites, isLoading: favoritesLoading, toggleFavorite, error: favoritesError, refreshFavorites } = useFavorites()
+
+  const pageError = profileError || artworksError || collectionError || transactionsError || favoritesError
 
   const displayAddress = userAddress || '—'
   const displayName = profile?.username || 'Artist'
@@ -47,15 +53,25 @@ export function ProfilePage() {
   const handleFavorite = async (artwork: Artwork) => {
     try {
       if (!account.isConnected || !account.publicKey) {
-        console.error('Wallet not connected')
+        showError('Please connect your wallet to manage favorites.')
         return
       }
 
       const isCurrentlyFavorite = favorites.some(fav => fav.id === artwork.id)
       await toggleFavorite(artwork.id, isCurrentlyFavorite)
     } catch (error) {
-      console.error('Failed to toggle favorite:', error)
+      showError(error)
     }
+  }
+
+  const handleRetryAll = async () => {
+    await Promise.all([
+      refetchProfile(),
+      refetchArtworks(),
+      refetchCollection(),
+      refetchTransactions(),
+      refreshFavorites(),
+    ])
   }
 
   const shortAddress =
@@ -76,6 +92,15 @@ export function ProfilePage() {
         { label: 'Home', href: '/' },
         { label: 'Profile' },
       ]} />
+      {pageError && (
+        <ErrorDisplay
+          error={ErrorHandler.handle(pageError)}
+          onRetry={handleRetryAll}
+          showRetry
+          showDismiss={false}
+          className="mb-4"
+        />
+      )}
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
         <div className="lg:col-span-1">
           <Card padding="lg" className="text-center px-4">
@@ -140,11 +165,10 @@ export function ProfilePage() {
               {tabs.map((tab) => (
                 <button
                   key={tab.id}
-                  className={`flex items-center space-x-2 font-medium pb-1 border-b-2 transition-colors ${
-                    activeTab === tab.id
+                  className={`flex items-center space-x-2 font-medium pb-1 border-b-2 transition-colors ${activeTab === tab.id
                       ? 'text-primary-600 border-primary-600'
                       : 'text-secondary-600 border-transparent'
-                  }`}
+                    }`}
                   onClick={() => setActiveTab(tab.id)}
                 >
                   {tab.icon}
