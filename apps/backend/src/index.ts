@@ -4,6 +4,7 @@ import dotenv from 'dotenv'
 import express from 'express'
 import mongoose from 'mongoose'
 
+import { securityMiddleware } from '@/middleware/security'
 import { requestContext } from '@/middleware/requestContext'
 import { requestLogger } from '@/middleware/requestLogger'
 import { errorHandler } from '@/middleware/errorHandler'
@@ -54,6 +55,11 @@ export function createApp() {
 
   app.use(cors(corsOptions))
   app.options('*', cors(corsOptions))
+  
+  // ── Security Headers ─────────────────────────────────────────────────────────────
+  // Apply security middleware early to ensure all responses have proper headers
+  app.use(securityMiddleware)
+  
   app.use(compression())
   app.use(express.json({ limit: '10mb' }))
   app.use(express.urlencoded({ extended: true }))
