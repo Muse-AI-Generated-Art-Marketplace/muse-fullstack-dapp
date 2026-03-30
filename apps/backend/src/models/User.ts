@@ -103,6 +103,7 @@ const UserSchema: Schema = new Schema(
 UserSchema.index({ username: 1 })
 UserSchema.index({ address: 1 })
 UserSchema.index({ 'stats.followers': -1 })
+UserSchema.index({ username: 'text', bio: 'text' })
 
 // Virtual relationships - enable reverse lookups
 UserSchema.virtual('createdArtworks', {

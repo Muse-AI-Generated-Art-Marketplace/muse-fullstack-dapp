@@ -75,6 +75,14 @@ const ArtworkSchema: Schema = new Schema(
   }
 )
 
+// Virtual for artist name lookup
+ArtworkSchema.virtual('artistInfo', {
+  ref: 'User',
+  localField: 'creator',
+  foreignField: 'address',
+  justOne: true
+})
+
 ArtworkSchema.index({ title: 'text', description: 'text', prompt: 'text' })
 ArtworkSchema.index({ creator: 1, isListed: 1 })
 ArtworkSchema.index({ category: 1, isListed: 1, createdAt: -1 })
