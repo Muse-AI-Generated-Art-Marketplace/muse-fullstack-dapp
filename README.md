@@ -205,6 +205,59 @@ npm run preview      # Preview production build
 
 ## 🔐 Security Considerations
 
+### Security Headers Configuration
+
+The Muse DApp implements comprehensive security headers using Helmet middleware to protect against common web vulnerabilities:
+
+#### Content Security Policy (CSP)
+- **Purpose**: Prevents Cross-Site Scripting (XSS) attacks and data injection
+- **Configuration**: Environment-specific policies
+  - **Development**: Report-only mode with `unsafe-inline` and `unsafe-eval` for debugging
+  - **Production**: Strict enforcement with minimal permissions
+
+```javascript
+// CSP Directives
+default-src 'self'                           // Default policy for all resources
+script-src 'self'                            // Scripts from same origin only
+style-src 'self' 'unsafe-inline'             // Styles allow inline for CSS frameworks
+img-src 'self' data: https:                  // Images with data URIs and HTTPS
+font-src 'self'                              // Fonts from same origin
+connect-src 'self' <api-domains>             // API connections
+frame-ancestors 'none'                       // Prevent clickjacking
+object-src 'none'                            // Block plugins
+```
+
+#### Frame Protection
+- **X-Frame-Options**: `DENY` - Prevents clickjacking attacks
+- **frame-ancestors**: `'none'` - Modern CSP equivalent
+
+#### MIME Type Protection
+- **X-Content-Type-Options**: `nosniff` - Prevents MIME sniffing attacks
+- **Content-Type**: Enforced for all responses
+
+#### Transport Security
+- **Strict-Transport-Security (HSTS)**: Production only
+  - `max-age=31536000` (1 year)
+  - `includeSubDomains`
+  - `preload`
+- **upgradeInsecureRequests**: Enforces HTTPS in production
+
+#### Cross-Origin Policies
+- **Cross-Origin-Opener-Policy**: `same-origin` - Isolates browsing contexts
+- **Cross-Origin-Resource-Policy**: `cross-origin` - Controls resource sharing
+- **Cross-Origin-Embedder-Policy**: `require-corp` (production) - Requires explicit CORS
+
+#### Privacy Headers
+- **Referrer-Policy**: `strict-origin-when-cross-origin` - Controls referrer information
+- **Permissions-Policy**: Disables unnecessary browser features:
+  - Geolocation, camera, microphone
+  - Payment handlers, USB access
+  - VR/AR displays, clipboard access
+
+#### Legacy Protection
+- **X-XSS-Protection**: `1; mode=block` - Legacy XSS protection
+- **X-DNS-Prefetch-Control**: Disabled to prevent information leakage
+
 ### Environment Variables
 
 ⚠️ **CRITICAL**: Never commit `.env` files to version control
@@ -213,6 +266,21 @@ npm run preview      # Preview production build
 - Each environment (dev, staging, prod) should have unique secrets
 - Rotate secrets regularly in production
 - Use strong random values for `JWT_SECRET`
+
+### Security Testing
+
+The security headers are thoroughly tested in `src/tests/securityHeaders.test.ts`:
+
+```bash
+# Run security tests
+npm run test -- src/tests/securityHeaders.test.ts
+
+# Test coverage includes:
+- All security headers presence and values
+- Environment-specific configurations
+- CSP directive validation
+- Integration with existing middleware
+```
 
 ### Generate Secure Secrets
 
@@ -229,6 +297,14 @@ node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
   - Vercel/Netlify: Environment variables
   - AWS: Secrets Manager or Parameter Store
   - HashiCorp Vault: For enterprise
+
+### Security Best Practices
+
+1. **Regular Updates**: Keep dependencies updated for security patches
+2. **Environment Isolation**: Different secrets per environment
+3. **Monitoring**: Monitor security header violations via CSP reports
+4. **Testing**: Run security tests in CI/CD pipeline
+5. **Audit**: Regular security audits and penetration testing
 
 ---
 

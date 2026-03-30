@@ -4,6 +4,7 @@ import dotenv from 'dotenv'
 import express from 'express'
 import mongoose from 'mongoose'
 
+import { securityMiddleware } from '@/middleware/security'
 import { requestContext } from '@/middleware/requestContext'
 import { requestLogger } from '@/middleware/requestLogger'
 import { errorHandler } from '@/middleware/errorHandler'
@@ -20,6 +21,7 @@ import favoriteRoutes from '@/routes/favorites'
 import apiKeyRoutes from '@/routes/apiKeys'
 import jobRoutes from '@/routes/jobs'
 import transactionRoutes from '@/routes/transactions'
+import analyticsRoutes from '@/routes/analytics'
 import healthService from '@/services/healthService'
 import cacheService from '@/services/cacheService'
 import { jobQueueService } from '@/services/jobQueueService'
@@ -54,6 +56,11 @@ export function createApp() {
 
   app.use(cors(corsOptions))
   app.options('*', cors(corsOptions))
+  
+  // ── Security Headers ─────────────────────────────────────────────────────────────
+  // Apply security middleware early to ensure all responses have proper headers
+  app.use(securityMiddleware)
+  
   app.use(compression())
   app.use(express.json({ limit: '10mb' }))
   app.use(express.urlencoded({ extended: true }))
@@ -118,6 +125,7 @@ export function createApp() {
   app.use('/api/keys', apiKeyRoutes)
   app.use('/api/jobs', jobRoutes)
   app.use('/api/transactions', transactionRoutes)
+  app.use('/api/analytics', analyticsRoutes)
 
   // ── 404 & Global Error Handlers ──────────────────────────────────────────────
   app.use(notFound)
