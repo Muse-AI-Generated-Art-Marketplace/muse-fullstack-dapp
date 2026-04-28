@@ -6,6 +6,7 @@ import mongoose from 'mongoose'
 
 import { database } from '@/config/database'
 import { securityMiddleware } from '@/middleware/security'
+import { addCDNHeaders, injectCDNConfig } from '@/middleware/cdnMiddleware'
 import { requestContext } from '@/middleware/requestContext'
 import { requestLogger } from '@/middleware/requestLogger'
 import { errorHandler } from '@/middleware/errorHandler'
@@ -37,6 +38,7 @@ import { websocketService } from '@/services/websocketService'
 import { ensureIndexes } from '@/scripts/ensureIndexes'
 import { runMigrations } from '@/services/migrationService'
 import adminRoutes from '@/routes/admin'
+import cdnRoutes from '@/routes/cdn'
 import logsRoute from "./routes/logs";
 import { optionalAuthenticate } from '@/middleware/authMiddleware';
 import { standardLimiter } from '@/middleware/rateLimitMiddleware';
@@ -74,6 +76,11 @@ export function createApp() {
   // ── Security Headers ─────────────────────────────────────────────────────────────
   // Apply security middleware early to ensure all responses have proper headers
   app.use(securityMiddleware)
+  // ── CDN Headers & Configuration ──────────────────────────────────────────────────
+  // Apply CDN headers for static assets and inject CDN configuration
+  app.use(addCDNHeaders)
+  app.use(injectCDNConfig)
+  
   
   app.use(compression())
   app.use(express.json({ limit: '10mb' }))
@@ -139,6 +146,7 @@ export function createApp() {
   app.use('/api/users', userRoutes)
   app.use('/api/search', searchRoutes)
   app.use('/api/ai', aiRoutes)
+  app.use('/api/cdn', cdnRoutes)
   app.use('/api/metadata', metadataRoutes)
   app.use('/api/cache', cacheRoutes)
   app.use('/api/cache', cacheManagementRoutes)
