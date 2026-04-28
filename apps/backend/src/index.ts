@@ -12,6 +12,7 @@ import { requestLogger } from '@/middleware/requestLogger'
 import { errorHandler } from '@/middleware/errorHandler'
 import { notFound } from '@/middleware/notFound'
 import { deprecationMiddleware, addVersionHeader, API_VERSION } from '@/middleware/deprecation'
+import { featureFlagMiddleware } from '@/middleware/featureFlagMiddleware'
 import v1Routes from '@/routes/v1'
 import authRoutes from '@/routes/auth'
 import artworkRoutes from '@/routes/artwork'
@@ -137,7 +138,8 @@ export function createApp() {
   // ── API Routes ───────────────────────────────────────────────────────────────
   // Apply optional authentication globally to populate req.user for rate limiting
   app.use('/api', optionalAuthenticate)
-  
+  app.use('/api', featureFlagMiddleware)
+
   // Apply baseline rate limiting to all API endpoints
   app.use('/api', standardLimiter)
 

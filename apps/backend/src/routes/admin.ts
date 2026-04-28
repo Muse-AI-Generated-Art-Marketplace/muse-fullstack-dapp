@@ -15,5 +15,7 @@ router.get('/contract/history', (req, res) => adminController.getContractUpgrade
 router.post('/migrations/run', (req, res) => adminController.runMigrations(req as any, res));
 router.post('/migrations/rollback', (req, res) => adminController.rollbackMigration(req as any, res));
 router.get('/migrations/status', (req, res) => adminController.getMigrationStatus(req as any, res));
-
+// ── Feature Flags ───────────────────────────────────────────────────────────
+router.get('/feature-flags', (req, res) => adminController.getFeatureFlags(req as any, res));
+router.get('/feature-flags/evaluate', (req, res) => adminController.evaluateFeatureFlag(req as any, res));
 export default router;
