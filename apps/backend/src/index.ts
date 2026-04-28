@@ -8,6 +8,7 @@ import { database } from '@/config/database'
 import { securityMiddleware } from '@/middleware/security'
 import { requestContext } from '@/middleware/requestContext'
 import { requestLogger } from '@/middleware/requestLogger'
+import { performanceLogger } from '@/middleware/performanceLogger'
 import { errorHandler } from '@/middleware/errorHandler'
 import { notFound } from '@/middleware/notFound'
 import { deprecationMiddleware, addVersionHeader, API_VERSION } from '@/middleware/deprecation'
@@ -76,15 +77,18 @@ export function createApp() {
   app.use(compression())
   app.use(express.json({ limit: '10mb' }))
   app.use(express.urlencoded({ extended: true }))
-  app.use("/logs", logsRoute);
 
   // ── Request Tracing ──────────────────────────────────────────────────────────
   app.use(requestContext)
 
-  // ── Structured HTTP Logging (replaces morgan) ────────────────────────────────
+  // ── Structured HTTP Logging & Performance Monitoring ────────────────────────
   if (process.env.NODE_ENV !== 'test') {
     app.use(requestLogger)
+    app.use(performanceLogger)
   }
+
+  // ── Frontend error ingestion & log query ─────────────────────────────────────
+  app.use('/logs', logsRoute)
 
   // ── Health / Readiness / Liveness ────────────────────────────────────────────
   app.get('/health', async (_req, res, next) => {
