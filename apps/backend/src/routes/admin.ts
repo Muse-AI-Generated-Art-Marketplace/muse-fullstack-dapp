@@ -23,6 +23,10 @@ import {
   resetUserRateLimits,
   getUserRateLimitStatus
 } from '@/controllers/adminRateLimitController';
+import { Router } from "express";
+import { adminController } from "@/controllers/adminController";
+import { authenticateAdmin } from "@/middleware/adminAuth";
+import { backupService } from "@/services/backupService";
 
 const router = Router();
 
@@ -30,8 +34,12 @@ const router = Router();
 router.use(authenticateAdmin);
 
 // ── Contract Upgrades ──────────────────────────────────────────────────────
-router.post('/contract/upgrade', (req, res) => adminController.upgradeContract(req as any, res));
-router.get('/contract/history', (req, res) => adminController.getContractUpgradeHistory(req as any, res));
+router.post("/contract/upgrade", (req, res) =>
+  adminController.upgradeContract(req as any, res),
+);
+router.get("/contract/history", (req, res) =>
+  adminController.getContractUpgradeHistory(req as any, res),
+);
 
 // ── Database Migrations ────────────────────────────────────────────────────
 router.post('/migrations/run', (req, res) => adminController.runMigrations(req as any, res));
@@ -45,4 +53,7 @@ router.get('/rate-limit/stats', validate(rateLimitStatsSchema), getRateLimitStat
 router.post('/users/:userId/reset-rate-limits', validate(resetUserRateLimitsSchema), resetUserRateLimits);
 router.get('/users/:userId/rate-limit-status', validate(getUserRateLimitStatusSchema), getUserRateLimitStatus);
 
+// ── Feature Flags ───────────────────────────────────────────────────────────
+router.get('/feature-flags', (req, res) => adminController.getFeatureFlags(req as any, res));
+router.get('/feature-flags/evaluate', (req, res) => adminController.evaluateFeatureFlag(req as any, res));
 export default router;
