@@ -217,7 +217,9 @@ export async function startServer() {
   if (process.env.NODE_ENV !== 'test') {
     try {
       await jobQueueService.initialize()
-      logger.info('Job queue service initialized')
+      const { registerAllJobProcessors } = await import('@/services/jobProcessors')
+      registerAllJobProcessors(jobQueueService)
+      logger.info('Job queue service initialized and processors registered')
     } catch (error) {
       logger.warn('Job queue service initialization failed:', error)
     }

@@ -47,31 +47,29 @@ export const generateImage = async (
     };
 
     log.info(
-      `Starting image generation for user ${authReq.user?.address}, prompt length: ${prompt.length}`,
+      `Queueing image generation for user ${authReq.user?.address}, prompt length: ${prompt.length}`,
     );
 
-    const result = await aiService.generateImage(request);
-
-    generationStore.set(result.generationId, {
-      ...result,
+    const { jobQueueService, JobType } = await import('@/services/jobQueueService');
+    
+    const job = await jobQueueService.addJob(JobType.AI_GENERATION, {
+      prompt: prompt.trim(),
       userId: authReq.user?.id,
-      createdAt: new Date(),
+      style,
+      quality,
+      model,
+      dimensions: request.size
     });
-
-    if (result.status === "completed") {
-      log.info(`Image generation completed: ${result.generationId}`);
-    }
 
     res.status(202).json({
       success: true,
       data: {
-        generationId: result.generationId,
-        status: result.status,
+        generationId: job.id,
+        status: 'queued',
         prompt: request.prompt,
         style,
         quality,
-        provider: result.provider,
-        estimatedTime: result.status === "processing" ? "30 seconds" : null,
+        estimatedTime: "30 seconds",
       },
     });
   } catch (error) {

@@ -169,6 +169,33 @@ export const createArtwork = async (req: Request, res: Response, next: NextFunct
     })
 
     log.info('Artwork created', { artworkId: artwork._id, creator })
+
+    // ── Queue Background Jobs ──────────────────────────────────────────────────
+    try {
+      const { jobQueueService, JobType } = await import('@/services/jobQueueService')
+      
+      // Queue image optimization and thumbnail generation
+      await jobQueueService.addJob(JobType.IMAGE_PROCESSING, {
+        artworkId: artwork._id,
+        imageUrl: artwork.imageUrl,
+        userId: creator,
+        operations: ['thumbnail', 'optimize', 'watermark']
+      })
+
+      // Queue email notification for the creator
+      await jobQueueService.addJob(JobType.EMAIL_NOTIFICATION, {
+        to: (req as any).user?.email || 'user@example.com',
+        subject: 'Artwork Created Successfully',
+        template: 'artwork-created',
+        data: { artworkId: artwork._id, title: artwork.title },
+        userId: creator
+      })
+
+      log.info('Background jobs queued for artwork', { artworkId: artwork._id })
+    } catch (jobError) {
+      log.warn('Failed to queue background jobs for artwork', { artworkId: artwork._id, error: jobError })
+    }
+
     res.status(201).json({ success: true, data: artwork })
   } catch (error) {
     log.error('Failed to create artwork', { error })
