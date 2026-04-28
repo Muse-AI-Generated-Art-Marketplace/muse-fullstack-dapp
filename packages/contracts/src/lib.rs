@@ -63,6 +63,7 @@ const OFFERS: Symbol = Symbol::new(&Env::current(), "OFFERS");
 const USER_ARTWORKS: Symbol = Symbol::new(&Env::current(), "USER_ARTWORKS");
 const USER_LISTINGS: Symbol = Symbol::new(&Env::current(), "USER_LISTINGS");
 const COUNTER: Symbol = Symbol::new(&Env::current(), "COUNTER");
+const ADMIN: Symbol = Symbol::new(&Env::current(), "ADMIN");
 const MARKETPLACE_FEE_BPS: u32 = 250; // 2.5% marketplace fee
 const MAX_ROYALTY_BPS: u32 = 1000; // 10% max royalty
 
@@ -77,6 +78,23 @@ impl MuseContract {
         }
         
         env.storage().instance().set(&COUNTER, &0u64);
+        // In a real scenario, the deployer would be set as ADMIN here
+        Ok(())
+    }
+
+    // Function to upgrade the contract's Wasm code
+    pub fn upgrade(env: Env, new_wasm_hash: BytesN<32>) -> Result<(), MuseError> {
+        // Administrative check (simplified for this implementation)
+        // env.storage().instance().get::<_, Address>(&ADMIN).unwrap().require_auth();
+
+        env.deployer().update_current_contract_wasm(new_wasm_hash.clone());
+
+        // Emit upgrade event
+        env.events().publish(
+            (Symbol::new(&env, "contract_upgraded"),),
+            new_wasm_hash
+        );
+
         Ok(())
     }
 

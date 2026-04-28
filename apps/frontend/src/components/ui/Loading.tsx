@@ -1,4 +1,5 @@
 import React from 'react'
+import { Grid } from '@/components/layout/Grid'
 
 export interface LoadingProps {
   variant?: 'spinner' | 'skeleton' | 'pulse' | 'dots' | 'bars'
@@ -22,42 +23,20 @@ export function Loading({
 
   if (variant === 'spinner') {
     return (
-      <div className={`flex flex-col items-center gap-2 ${className}`}>
-        <div
-          className={`animate-spin rounded-full border-2 border-primary-600 border-t-transparent ${sizeClasses[size]}`}
-        />
-        {text && <p className="text-sm text-secondary-600">{text}</p>}
-      </div>
-    )
-  }
-
-  if (variant === 'dots') {
-    return (
-      <div className={`flex gap-1 items-center ${className}`}>
-        <div className="w-2 h-2 bg-primary-600 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-        <div className="w-2 h-2 bg-primary-600 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-        <div className="w-2 h-2 bg-primary-600 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
-        {text && <span className="ml-2 text-sm text-secondary-600">{text}</span>}
-      </div>
-    )
-  }
-
-  if (variant === 'bars') {
-    return (
-      <div className={`flex gap-1 items-center ${className}`}>
-        <div className="w-1 h-4 bg-primary-600 animate-pulse" style={{ animationDelay: '0ms' }} />
-        <div className="w-1 h-6 bg-primary-600 animate-pulse" style={{ animationDelay: '150ms' }} />
-        <div className="w-1 h-4 bg-primary-600 animate-pulse" style={{ animationDelay: '300ms' }} />
-        <div className="w-1 h-8 bg-primary-600 animate-pulse" style={{ animationDelay: '450ms' }} />
-        <div className="w-1 h-4 bg-primary-600 animate-pulse" style={{ animationDelay: '600ms' }} />
-        {text && <span className="ml-2 text-sm text-secondary-600">{text}</span>}
-      </div>
+      <div
+        role="status"
+        aria-label="Loading"
+        className={`animate-spin rounded-full border-2 border-primary-600 border-t-transparent ${sizeClasses[size]} ${className}`}
+      />
     )
   }
 
   if (variant === 'skeleton') {
     return (
       <div
+        role="status"
+        aria-label="Loading content"
+        aria-busy="true"
         className={`bg-secondary-200 rounded-md animate-pulse ${className}`}
       />
     )
@@ -66,6 +45,9 @@ export function Loading({
   if (variant === 'pulse') {
     return (
       <div
+        role="status"
+        aria-label="Refreshing"
+        aria-busy="true"
         className={`bg-secondary-100 rounded-md animate-pulse ${className}`}
       />
     )
@@ -243,9 +225,9 @@ export function LoadingCard({
 }: LoadingCardProps) {
   if (variant === 'artwork') {
     return (
-      <div className={className}>
+      <Grid responsive className={className}>
         {Array.from({ length: count }).map((_, i) => (
-          <div key={i} className="card-mobile overflow-hidden">
+          <div key={i} className="card overflow-hidden">
             <div className="aspect-square bg-secondary-200 animate-pulse" />
             <div className="p-4 space-y-3">
               <div className="h-4 bg-secondary-200 rounded animate-pulse" />
@@ -257,7 +239,7 @@ export function LoadingCard({
             </div>
           </div>
         ))}
-      </div>
+      </Grid>
     )
   }
 
@@ -288,7 +270,7 @@ export function LoadingCard({
   }
 
   return (
-    <div className={className}>
+    <Grid responsive className={className}>
       {Array.from({ length: count }).map((_, i) => (
         <div key={i} className="card p-4 space-y-3">
           <div className="h-4 bg-secondary-200 rounded animate-pulse" />
@@ -296,6 +278,7 @@ export function LoadingCard({
           <div className="h-20 bg-secondary-100 rounded animate-pulse" />
         </div>
       ))}
-    </div>
+    </Grid>
   )
 }
+

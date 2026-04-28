@@ -1,11 +1,26 @@
 import { useEffect } from 'react'
-import { Artwork } from '@/types'
+import { Artwork } from '@/services/artworkService'
 import { useIntersectionObserver } from '@/hooks/useIntersectionObserver'
 import { ArtworkCard, type ArtworkCardProps } from '@/components/artwork/ArtworkCard'
 import { Grid } from '@/components/layout/Grid'
 import { LoadingCard } from '@/components/ui/Loading'
 import { EmptyState } from './EmptyState'
-import { ArtworkGridProps } from '@/types'
+
+interface ArtworkGridProps {
+  artworks: Artwork[]
+  isLoading: boolean
+  hasNextPage: boolean
+  isFetchingNextPage: boolean
+  onLoadMore: () => void
+  onPurchase?: (artwork: Artwork) => void
+  onView?: (artwork: Artwork) => void
+  onClearFilters?: () => void
+  hasFilters?: boolean
+  cardVariant?: ArtworkCardProps['variant']
+  showPrice?: boolean
+  showCreator?: boolean
+  loadingCount?: number
+}
 
 export function ArtworkGrid({
   artworks,
@@ -49,10 +64,10 @@ export function ArtworkGrid({
         {artworks.map((artwork) => (
           <ArtworkCard
             key={artwork.id}
-            artwork={artwork}
+            artwork={artwork as any}
             variant={cardVariant}
-            onPurchase={onPurchase}
-            onView={onView}
+            onPurchase={onPurchase as any}
+            onView={onView as any}
             showPrice={showPrice}
             showCreator={showCreator}
           />

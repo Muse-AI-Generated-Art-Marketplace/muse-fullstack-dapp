@@ -1,9 +1,37 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
-import { BrowserRouter } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { HelmetProvider } from "react-helmet-async";
 import App from "./App";
 import "./index.css";
+import "./i18n";
+import { logError } from "./services/errorLogger";
+
+// Runtime JS errors
+window.onerror = (
+  message: string | Event,
+  source?: string,
+  lineno?: number,
+  colno?: number,
+  error?: Error
+) => {
+  logError({
+    message: typeof message === "string" ? message : "Unknown error",
+    source,
+    lineno,
+    colno,
+    stack: error?.stack,
+  });
+};
+
+// Unhandled promises
+window.onunhandledrejection = (event: PromiseRejectionEvent) => {
+  logError({
+    message:
+      event.reason?.message || "Unhandled Promise Rejection",
+    stack: event.reason?.stack,
+  });
+};
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -16,10 +44,10 @@ const queryClient = new QueryClient({
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
-    <QueryClientProvider client={queryClient}>
-      <BrowserRouter>
+    <HelmetProvider>
+      <QueryClientProvider client={queryClient}>
         <App />
-      </BrowserRouter>
-    </QueryClientProvider>
+      </QueryClientProvider>
+    </HelmetProvider>
   </React.StrictMode>,
 );

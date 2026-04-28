@@ -1,73 +1,62 @@
 import { Request, Response, NextFunction } from 'express'
 
-export interface AppError extends Error {
-  statusCode?: number
-  isOperational?: boolean
+export class AppError extends Error {
+  status: number
   code?: string
   details?: any
-}
+  isOperational: boolean
 
-export const errorHandler = (
-  err: AppError,
-  req: Request,
-  res: Response,
-  next: NextFunction
-) => {
-  const statusCode = err.statusCode || 500
-  const message = err.message || 'Internal Server Error'
-  const code = err.code || 'INTERNAL_ERROR'
-
-  console.error(`Error ${statusCode}: ${message}`)
-  console.error(err.stack)
-
-  res.status(statusCode).json({
-    success: false,
-    error: {
-      code,
-      message,
-      ...(process.env.NODE_ENV === 'development' && { 
-        stack: err.stack,
-        details: err.details 
-      }),
-    },
-  })
+  constructor(message: string, status = 500, code?: string, details?: any) {
+    super(message)
+    this.name = 'AppError'
+    this.status = status
+    this.code = code
+    this.details = details
+    this.isOperational = true
+    Error.captureStackTrace(this, this.constructor)
+  }
 }
 
 export const createError = (
-  message: string, 
-  statusCode: number = 500,
+  message: string,
+  status = 500,
   code?: string,
   details?: any
 ): AppError => {
-  const error = new Error(message) as AppError
-  error.statusCode = statusCode
-  error.isOperational = true
-  error.code = code || 'INTERNAL_ERROR'
-  error.details = details
-  return error
+  return new AppError(message, status, code, details)
 }
 
-// Predefined error types
-export const createValidationError = (message: string, details?: any): AppError => 
-  createError(message, 400, 'VALIDATION_ERROR', details)
+export const createNotFoundError = (resource: string): AppError => {
+  return createError(`${resource} not found`, 404, 'NOT_FOUND')
+}
 
-export const createNotFoundError = (resource: string): AppError => 
-  createError(`${resource} not found`, 404, 'NOT_FOUND')
+export const createValidationError = (message: string, details?: any): AppError => {
+  return createError(message, 400, 'VALIDATION_ERROR', details)
+}
 
-export const createUnauthorizedError = (message: string = 'Unauthorized'): AppError => 
-  createError(message, 401, 'UNAUTHORIZED')
+export const createExternalServiceError = (service: string, message: string): AppError => {
+  return createError(`${service} service error: ${message}`, 502, 'EXTERNAL_SERVICE_ERROR')
+}
 
-export const createForbiddenError = (message: string = 'Forbidden'): AppError => 
-  createError(message, 403, 'FORBIDDEN')
+export const errorHandler = (err: unknown, _req: Request, res: Response, _next: NextFunction): void => {
+  const error = err as AppError
+  const status = error?.status ?? 500
+  const response = {
+    success: false,
+    message: error?.message || 'Internal Server Error',
+    code: error?.code,
+    details: error?.details
+  } as {
+    success: false
+    message: string
+    code?: string
+    details?: any
+    stack?: string
+  }
 
-export const createRateLimitError = (message: string = 'Rate limit exceeded'): AppError => 
-  createError(message, 429, 'RATE_LIMIT_EXCEEDED')
+  if (process.env.NODE_ENV !== 'production' && error?.stack) {
+    response.stack = error.stack
+  }
 
-export const createServiceUnavailableError = (message: string = 'Service temporarily unavailable'): AppError => 
-  createError(message, 503, 'SERVICE_UNAVAILABLE')
-
-export const createDatabaseError = (message: string = 'Database operation failed'): AppError => 
-  createError(message, 500, 'DATABASE_ERROR')
-
-export const createExternalServiceError = (service: string, message: string = 'External service error'): AppError => 
-  createError(`${service}: ${message}`, 502, 'EXTERNAL_SERVICE_ERROR', { service })
+  res.status(status).json(response)
+}

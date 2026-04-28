@@ -1,11 +1,19 @@
 import { Router } from 'express'
-import { getArtworks, getArtworkById, createArtwork } from '@/controllers/artworkController'
-import { artworkListCache, artworkDetailCache } from '@/middleware/cacheMiddleware'
+import {
+  getArtworks,
+  getArtwork,
+  createArtwork,
+  updateArtwork,
+  deleteArtwork,
+} from '@/controllers/artworkController'
+import { authenticate, optionalAuthenticate } from '@/middleware/authMiddleware'
 
 const router = Router()
 
-router.get('/', artworkListCache, getArtworks)
-router.get('/:id', artworkDetailCache, getArtworkById)
-router.post('/', createArtwork)
+router.get('/', optionalAuthenticate, getArtworks)
+router.get('/:id', optionalAuthenticate, getArtwork)
+router.post('/', authenticate, createArtwork)
+router.put('/:id', authenticate, updateArtwork)
+router.delete('/:id', authenticate, deleteArtwork)
 
 export default router
