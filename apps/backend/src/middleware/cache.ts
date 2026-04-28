@@ -79,24 +79,21 @@ export const cacheMiddleware = (options: CacheOptions = {}) => {
 // Invalidate cache middleware
 export const invalidateCache = (patterns: string[]) => {
   return async (req: Request, res: Response, next: NextFunction) => {
-    const originalSend = res.send
-    
-    res.send = function(data: any) {
-      // Invalidate cache patterns after successful response
+    const originalJson = res.json.bind(res)
+
+    res.json = function(data: any) {
       if (res.statusCode >= 200 && res.statusCode < 300) {
-        patterns.forEach(async pattern => {
-          try {
-            await cacheService.delPattern(pattern)
-            logger.debug(`Invalidated cache pattern: ${pattern}`)
-          } catch (error) {
-            logger.warn(`Failed to invalidate cache pattern ${pattern}:`, error)
-          }
-        })
+        Promise.all(
+          patterns.map(pattern =>
+            cacheService.delPattern(pattern).then(() =>
+              logger.debug(`Invalidated cache pattern: ${pattern}`)
+            )
+          )
+        ).catch(error => logger.warn('Failed to invalidate cache patterns:', error))
       }
-      
-      return originalSend.call(this, data)
+      return originalJson(data)
     }
-    
+
     next()
   }
 }

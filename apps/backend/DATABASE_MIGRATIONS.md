@@ -2,7 +2,7 @@
 
 ## Overview
 
-This document describes the database migration system for the Muse Backend. Database migrations are scripts that manage schema changes and data consistency in MongoDB, ensuring that the database evolves in a controlled and documented manner.
+This document describes the enhanced database migration system for the Muse Backend. Database migrations are scripts that manage schema changes and data consistency in MongoDB, ensuring that the database evolves in a controlled and documented manner.
 
 ## Why Migrations Matter
 
@@ -11,6 +11,8 @@ This document describes the database migration system for the Muse Backend. Data
 - **Reproducibility**: Create consistent dev, staging, and production environments
 - **Rollback Safety**: Ability to undo schema changes if needed
 - **Data Consistency**: Maintain data integrity during schema evolution
+- **Concurrent Safety**: Prevent multiple processes from running migrations simultaneously
+- **Integrity Verification**: Detect if migration files have been modified after execution
 
 ## Architecture
 
@@ -20,6 +22,9 @@ This document describes the database migration system for the Muse Backend. Data
    - Core service that manages migrations
    - Tracks executed migrations in `migrations` collection
    - Implements up/down migration logic
+   - Provides migration locking to prevent concurrent execution
+   - Calculates and verifies checksums for migration integrity
+   - Supports batch-based rollback operations
 
 2. **Migration Files** (`src/migrations/`)
    - Individual migration files with up/down functions
@@ -30,11 +35,17 @@ This document describes the database migration system for the Muse Backend. Data
    - CLI tool for running migration commands
    - Called automatically on server startup
    - Can also be run manually
+   - Supports dry-run mode for previewing changes
 
 4. **Migrations Collection**
    - MongoDB collection that tracks executed migrations
    - Prevents the same migration from running twice
-   - Records execution timestamp
+   - Records execution timestamp, checksum, batch number, and execution time
+
+5. **Migration Locks Collection**
+   - MongoDB collection that manages migration locks
+   - Prevents concurrent migration execution
+   - Automatically releases stale locks after 30 minutes
 
 ## CLI Commands
 
@@ -46,13 +57,25 @@ npm run migrate
 
 Executes all pending migrations in order.
 
-### Rollback Last Migration
-
+**Dry-run mode:**
 ```bash
-npm run migrate:rollback
+npm run migrate -- --dry-run
+# or
+npm run migrate -- -d
 ```
 
-Rolls back the most recently executed migration.
+### Rollback Migrations
+
+```bash
+# Rollback last migration
+npm run migrate:rollback
+
+# Rollback last N migrations
+npm run migrate:rollback 3
+
+# Rollback with dry-run
+npm run migrate:rollback -- --dry-run
+```
 
 ### Check Migration Status
 
@@ -60,7 +83,11 @@ Rolls back the most recently executed migration.
 npm run migrate:status
 ```
 
-Displays the status of all migrations (executed or pending).
+Displays the status of all migrations (executed or pending), including:
+- Execution status
+- Batch number
+- Execution time
+- Checksum (first 8 characters)
 
 ### Run Specific Migration
 
@@ -73,6 +100,28 @@ Example:
 ```bash
 npm run migrate:run 001_create_users_collection
 ```
+
+### Rollback to Specific Batch
+
+```bash
+npm run migrate:batch <batch-number>
+```
+
+Rolls back all migrations executed after the specified batch.
+
+Example:
+
+```bash
+npm run migrate:batch 2
+```
+
+### Validate Migration Checksums
+
+```bash
+npm run migrate:validate
+```
+
+Verifies that executed migration files haven't been modified since execution. Returns exit code 1 if validation fails.
 
 ## Creating a New Migration
 
@@ -196,9 +245,30 @@ npm run migrate:status
 
 # Rollback if needed
 npm run migrate:rollback
+
+# Validate checksums
+npm run migrate:validate
 ```
 
-### 6. Data Migration Patterns
+### 6. Use Dry-Run Mode
+
+Always use dry-run mode before executing migrations in production:
+
+```bash
+# Preview what will happen
+npm run migrate -- --dry-run
+
+# Preview rollback
+npm run migrate:rollback -- --dry-run
+```
+
+### 7. Never Modify Executed Migrations
+
+- Once a migration is executed, never modify the file
+- The system will detect modifications via checksum validation
+- If you need to change something, create a new migration instead
+
+### 8. Data Migration Patterns
 
 #### Adding a required field with default value
 
@@ -247,6 +317,7 @@ This ensures the database schema is always up-to-date before the API starts.
 2. Review migration syntax and MongoDB operations
 3. Check migration file name follows naming convention
 4. Ensure `up()` and `down()` functions are properly defined
+5. Check if another process is holding the migration lock
 
 ### Migration Not Running
 
@@ -270,6 +341,12 @@ This ensures the database schema is always up-to-date before the API starts.
 npm run migrate:status
 ```
 
+**Error**: "Cannot rollback migration - file has been modified"
+
+**Solution**: The migration file has been modified since execution. This is a safety feature to prevent accidental data corruption. Options:
+1. Restore the original migration file from version control
+2. Create a new migration to fix the issue instead of rolling back
+
 ### Schema Validation Errors
 
 **Issue**: Migration runs but encounters validation errors
@@ -279,6 +356,26 @@ npm run migrate:status
 1. Ensure collection schema matches in `up()` function
 2. Update existing documents to match new schema before validation
 3. Use `$jsonSchema` validator carefully during migrations
+
+### Lock Issues
+
+**Error**: "Could not acquire migration lock - another migration may be in progress"
+
+**Solutions**:
+
+1. Check if another migration process is running
+2. If no process is running, the lock may be stale (wait 30 minutes for auto-release)
+3. Manually remove the lock from the `migration_locks` collection in MongoDB
+
+### Checksum Validation Errors
+
+**Error**: "Migration file has been modified since execution"
+
+**Solutions**:
+
+1. Never modify executed migration files
+2. If you need to make changes, create a new migration instead
+3. Restore the original file from version control if needed
 
 ## Examples
 
@@ -360,6 +457,8 @@ Before committing a migration:
 - [ ] Migration tested locally with `npm run migrate`
 - [ ] Rollback tested with `npm run migrate:rollback`
 - [ ] Migration status verified with `npm run migrate:status`
+- [ ] Checksums validated with `npm run migrate:validate`
+- [ ] Dry-run tested with `npm run migrate -- --dry-run`
 - [ ] No hardcoded values (use environment variables)
 - [ ] Error handling implemented for idempotent operations
 - [ ] Indexes created for better query performance
