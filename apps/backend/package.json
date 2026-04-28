@@ -3,19 +3,19 @@
   "version": "1.0.0",
   "description": "Muse Backend API - AI Art Marketplace on Stellar",
   "main": "dist/index.js",
-   "scripts": {
-     "dev": "tsx watch src/index.ts",
-     "build": "tsc",
-     "start": "node dist/index.js",
-     "test": "jest",
-     "lint": "eslint src --ext .ts",
-     "lint:security": "eslint -c .eslintrc.security.js src --ext .ts --max-warnings 0",
-     "lint:fix": "eslint src --ext .ts --fix",
-     "migrate": "tsx migrationScripts/run.ts up",
-     "migrate:rollback": "tsx migrationScripts/run.ts down",
-     "migrate:status": "tsx migrationScripts/run.ts status",
-     "migrate:run": "tsx migrationScripts/run.ts run"
-   },
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "test": "jest",
+    "lint": "eslint src --ext .ts",
+    "lint:security": "eslint -c .eslintrc.security.js src --ext .ts --max-warnings 0",
+    "lint:fix": "eslint src --ext .ts --fix",
+    "migrate": "tsx migrationScripts/run.ts up",
+    "migrate:rollback": "tsx migrationScripts/run.ts down",
+    "migrate:status": "tsx migrationScripts/run.ts status",
+    "migrate:run": "tsx migrationScripts/run.ts run"
+  },
   "dependencies": {
     "@types/jsonwebtoken": "^9.0.10",
     "aws-sdk": "^2.1490.0",
@@ -45,8 +45,11 @@
     "zod": "^3.25.76",
     "nodemailer": "^6.9.7",
     "@sendgrid/mail": "^7.7.0"
+    "winston": "^3.19.0",
+    "winston-daily-rotate-file": "^5.0.0",
+    "zod": "^3.25.76"
   },
-   "devDependencies": {
+  "devDependencies": {
     "@types/aws-sdk": "^2.7.0",
     "@types/bull": "^4.10.0",
     "@types/compression": "^1.8.1",
@@ -68,7 +71,12 @@
     "@typescript-eslint/parser": "^6.0.0",
     "eslint": "^8.45.0",
     "eslint-plugin-security": "^4.0.0",
+    "@types/winston": "^2.4.4",
+    "@typescript-eslint/eslint-plugin": "^6.4.0",
+    "@typescript-eslint/parser": "^6.4.0",
+    "eslint": "^8.47.0",
     "eslint-plugin-node-security": "^4.0.4",
+    "eslint-plugin-security": "^4.0.0",
     "jest": "^29.6.2",
     "supertest": "^6.3.3",
     "ts-jest": "^29.1.1",
