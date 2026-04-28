@@ -144,6 +144,9 @@ export function createApp() {
     }
   })
 
+  // ── Swagger Documentation ────────────────────────────────────────────────────
+  setupSwagger(app)
+
   // ── API Routes ───────────────────────────────────────────────────────────────
   // Apply optional authentication globally to populate req.user for rate limiting
   app.use('/api', optionalAuthenticate)
@@ -187,6 +190,22 @@ export async function startServer() {
     process.exit(1)
   }
 
+  // Initialize backup service and scheduled backups
+  try {
+    await backupService.initialize()
+    logger.info('✅ Backup service initialized')
+  } catch (error) {
+    logger.warn('Backup service initialization failed:', error)
+  }
+
+  // Initialize backup queue (scheduled backups configured via BACKUP_SCHEDULE_CRON)
+  try {
+    // backupQueue is initialized on import (see queues/backupQueue.ts)
+    logger.info('✅ Backup queue initialized')
+  } catch (error) {
+    logger.warn('Backup queue initialization failed:', error)
+  }
+
   // Ensure database indexes are created
   await ensureIndexes()
   logger.info('🔍 Database indexes verified and created')
@@ -225,6 +244,14 @@ if (process.env.NODE_ENV !== 'test') {
 
 async function shutdown(signal: string) {
   logger.info(`${signal} received, shutting down gracefully`)
+
+  try {
+    await new Promise<void>((resolve) => {
+      backupQueue.close().then(resolve).catch(resolve)
+    })
+  } catch (error) {
+    logger.warn('Backup queue shutdown encountered an error:', error)
+  }
 
   try {
     await jobQueueService.shutdown()
