@@ -17,6 +17,7 @@ import {
   validateUploadedFiles,
   setUploadOptions,
   handleUploadError,
+  uploadRateLimit,
 } from '@/middleware/fileUploadMiddleware'
 
 const router = Router()
@@ -24,6 +25,7 @@ const router = Router()
 // ── Single File Upload ───────────────────────────────────────────────────────
 router.post(
   '/single',
+  uploadRateLimit,
   authenticate,
   setUploadOptions({ folder: 'uploads', isPublic: true }),
   uploadSingle('file'),
@@ -34,6 +36,7 @@ router.post(
 // ── Multiple Files Upload ──────────────────────────────────────────────────────
 router.post(
   '/multiple',
+  uploadRateLimit,
   authenticate,
   setUploadOptions({ folder: 'uploads', isPublic: true }),
   uploadMultiple('files', 5),
@@ -44,6 +47,7 @@ router.post(
 // ── Artwork Image Upload (Specialized endpoint for artwork images) ───────────────
 router.post(
   '/artwork-image',
+  uploadRateLimit,
   authenticate,
   setUploadOptions({ folder: 'artworks', isPublic: true }),
   uploadSingle('image'),
@@ -54,6 +58,7 @@ router.post(
 // ── Public File Upload (No authentication required) ───────────────────────────
 router.post(
   '/public',
+  uploadRateLimit,
   setUploadOptions({ folder: 'public', isPublic: true }),
   uploadSingle('file'),
   validateUploadedFiles,
