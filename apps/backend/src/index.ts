@@ -81,9 +81,18 @@ export function createApp() {
   // Apply CDN headers for static assets and inject CDN configuration
   app.use(addCDNHeaders)
   app.use(injectCDNConfig)
-  
-  
-  app.use(compression())
+
+  app.use(
+    compression({
+      threshold: 0,
+      filter: (req, res) => {
+        if (req.headers['x-no-compression']) {
+          return false
+        }
+        return compression.filter(req, res)
+      }
+    })
+  )
   app.use(express.json({ limit: '10mb' }))
   app.use(express.urlencoded({ extended: true }))
   app.use("/logs", logsRoute);
