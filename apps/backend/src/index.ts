@@ -6,12 +6,14 @@ import mongoose from 'mongoose'
 
 import { database } from '@/config/database'
 import { securityMiddleware } from '@/middleware/security'
+import { addCDNHeaders, injectCDNConfig } from '@/middleware/cdnMiddleware'
 import { requestContext } from '@/middleware/requestContext'
 import { requestLogger } from '@/middleware/requestLogger'
 import { performanceLogger } from '@/middleware/performanceLogger'
 import { errorHandler } from '@/middleware/errorHandler'
 import { notFound } from '@/middleware/notFound'
 import { deprecationMiddleware, addVersionHeader, API_VERSION } from '@/middleware/deprecation'
+import { featureFlagMiddleware } from '@/middleware/featureFlagMiddleware'
 import v1Routes from '@/routes/v1'
 import authRoutes from '@/routes/auth'
 import artworkRoutes from '@/routes/artwork'
@@ -36,6 +38,9 @@ import { jobQueueService } from '@/services/jobQueueService'
 import { createLogger } from '@/utils/logger'
 import { websocketService } from '@/services/websocketService'
 import { ensureIndexes } from '@/scripts/ensureIndexes'
+import { runMigrations } from '@/services/migrationService'
+import adminRoutes from '@/routes/admin'
+import cdnRoutes from '@/routes/cdn'
 import logsRoute from "./routes/logs";
 import { optionalAuthenticate } from '@/middleware/authMiddleware';
 import { standardLimiter } from '@/middleware/rateLimitMiddleware';
@@ -73,8 +78,22 @@ export function createApp() {
   // ── Security Headers ─────────────────────────────────────────────────────────────
   // Apply security middleware early to ensure all responses have proper headers
   app.use(securityMiddleware)
-  
-  app.use(compression())
+  // ── CDN Headers & Configuration ──────────────────────────────────────────────────
+  // Apply CDN headers for static assets and inject CDN configuration
+  app.use(addCDNHeaders)
+  app.use(injectCDNConfig)
+
+  app.use(
+    compression({
+      threshold: 0,
+      filter: (req, res) => {
+        if (req.headers['x-no-compression']) {
+          return false
+        }
+        return compression.filter(req, res)
+      }
+    })
+  )
   app.use(express.json({ limit: '10mb' }))
   app.use(express.urlencoded({ extended: true }))
 
@@ -129,10 +148,14 @@ export function createApp() {
     }
   })
 
+  // ── Swagger Documentation ────────────────────────────────────────────────────
+  setupSwagger(app)
+
   // ── API Routes ───────────────────────────────────────────────────────────────
   // Apply optional authentication globally to populate req.user for rate limiting
   app.use('/api', optionalAuthenticate)
-  
+  app.use('/api', featureFlagMiddleware)
+
   // Apply baseline rate limiting to all API endpoints
   app.use('/api', standardLimiter)
 
@@ -141,10 +164,12 @@ export function createApp() {
   app.use('/api/users', userRoutes)
   app.use('/api/search', searchRoutes)
   app.use('/api/ai', aiRoutes)
+  app.use('/api/cdn', cdnRoutes)
   app.use('/api/metadata', metadataRoutes)
   app.use('/api/cache', cacheRoutes)
   app.use('/api/cache', cacheManagementRoutes)
   app.use('/api/database', databaseMetricsRoutes)
+  app.use('/api/admin', adminRoutes)
 
   // ── 404 & Global Error Handlers ──────────────────────────────────────────────
   app.use(notFound)
@@ -160,15 +185,34 @@ export async function startServer() {
   if (database.getConnectionStatus()) {
     logger.info('Connected to MongoDB with connection pooling')
 
-    try {
-      await ensureIndexes()
-      logger.info('Database indexes verified and created')
-    } catch (error) {
-      logger.warn('Could not verify database indexes:', error)
-    }
-  } else {
-    logger.warn('Running without MongoDB connection. Some features may be unavailable.')
+  // Run pending database migrations before accepting traffic
+  try {
+    await runMigrations()
+    logger.info('✅ Database migrations completed')
+  } catch (error) {
+    logger.error('❌ Database migrations failed — aborting startup', error)
+    process.exit(1)
   }
+
+  // Initialize backup service and scheduled backups
+  try {
+    await backupService.initialize()
+    logger.info('✅ Backup service initialized')
+  } catch (error) {
+    logger.warn('Backup service initialization failed:', error)
+  }
+
+  // Initialize backup queue (scheduled backups configured via BACKUP_SCHEDULE_CRON)
+  try {
+    // backupQueue is initialized on import (see queues/backupQueue.ts)
+    logger.info('✅ Backup queue initialized')
+  } catch (error) {
+    logger.warn('Backup queue initialization failed:', error)
+  }
+
+  // Ensure database indexes are created
+  await ensureIndexes()
+  logger.info('🔍 Database indexes verified and created')
 
   if (process.env.NODE_ENV !== 'test') {
     try {
@@ -204,6 +248,14 @@ if (process.env.NODE_ENV !== 'test') {
 
 async function shutdown(signal: string) {
   logger.info(`${signal} received, shutting down gracefully`)
+
+  try {
+    await new Promise<void>((resolve) => {
+      backupQueue.close().then(resolve).catch(resolve)
+    })
+  } catch (error) {
+    logger.warn('Backup queue shutdown encountered an error:', error)
+  }
 
   try {
     await jobQueueService.shutdown()
