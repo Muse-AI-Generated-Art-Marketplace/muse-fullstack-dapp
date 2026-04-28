@@ -30,6 +30,7 @@ import analyticsRoutes from '@/routes/analytics'
 import bidRoutes from '@/routes/bidRoutes'
 import fileUploadRoutes from '@/routes/fileUpload'
 import databaseMetricsRoutes from '@/routes/databaseMetrics'
+import rateLimitRoutes from '@/routes/rateLimit'
 import healthService from '@/services/healthService'
 import cacheService from '@/services/cacheService'
 import { jobQueueService } from '@/services/jobQueueService'
@@ -38,6 +39,7 @@ import { websocketService } from '@/services/websocketService'
 import { emailService } from '@/services/emailService'
 import { ensureIndexes } from '@/scripts/ensureIndexes'
 import { runMigrations } from '@/services/migrationService'
+import { redis } from '@/config/redis'
 import adminRoutes from '@/routes/admin'
 import logsRoute from "./routes/logs";
 import { optionalAuthenticate } from '@/middleware/authMiddleware';
@@ -147,6 +149,7 @@ export function createApp() {
   app.use('/api/database', databaseMetricsRoutes)
   app.use('/api/admin', adminRoutes)
   app.use('/api/bids', bidRoutes)
+  app.use('/api/rate-limit', rateLimitRoutes)
 
   // ── 404 & Global Error Handlers ──────────────────────────────────────────────
   app.use(notFound)
@@ -174,6 +177,14 @@ export async function startServer() {
   // Ensure database indexes are created
   await ensureIndexes()
   logger.info('🔍 Database indexes verified and created')
+
+  // Initialize Redis for distributed rate limiting
+  try {
+    await redis.connect()
+    logger.info('🔴 Redis connected for distributed rate limiting')
+  } catch (error) {
+    logger.warn('Redis connection failed, rate limiting will use memory fallback:', error)
+  }
 
   if (process.env.NODE_ENV !== 'test') {
     try {
@@ -233,6 +244,12 @@ async function shutdown(signal: string) {
     await cacheService.disconnect()
   } catch (error) {
     logger.warn('Cache disconnect encountered an error:', error)
+  }
+
+  try {
+    await redis.disconnect()
+  } catch (error) {
+    logger.warn('Redis disconnect encountered an error:', error)
   }
 
   try {

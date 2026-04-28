@@ -5,6 +5,7 @@ import User from "@/models/User";
 import { createError } from "@/middleware/errorHandler";
 import { createLogger } from "@/utils/logger";
 import cacheService from "@/services/cacheService";
+import { verificationService } from "@/services/verificationService";
 
 const logger = createLogger("AuthController");
 const JWT_SECRET =
@@ -12,8 +13,7 @@ const JWT_SECRET =
 const TOKEN_EXPIRY = "24h";
 
 /**
- * Validates a signature from a Stellar wallet.
- * In a real implementation, you'd use a challenge-based system to prevent replay attacks.
+ * Login with Stellar wallet signature verification
  */
 export const login = async (
   req: Request,
@@ -21,56 +21,30 @@ export const login = async (
   next: NextFunction,
 ) => {
   try {
-    const { address, signature, payload } = req.body;
+    const { address, signature, username } = req.body;
 
-    const storedChallenge = await cacheService.get(`auth_challenge:${address}`);
-    if (!storedChallenge) {
-      return next(
-        createError(
-          "Challenge expired or not found. Please request a new challenge.",
-          401,
-        ),
-      );
+    if (!address || !signature) {
+      return next(createError("Address and signature are required", 400));
     }
 
-    if (payload !== storedChallenge) {
-      return next(
-        createError(
-          "Invalid payload: does not match authentication challenge",
-          401,
-        ),
-      );
-    }
-
-    // Verify signature using Stellar service
-    const isVerified = stellarService.verifySignature(
-      payload,
-      signature,
+    // Verify signature using our verification service
+    const verificationResult = await verificationService.verifySignature(
       address,
+      signature,
+      username
     );
 
-    if (!isVerified) {
-      return next(createError("Invalid signature provided", 401));
+    if (!verificationResult.success) {
+      return next(createError(verificationResult.error || "Authentication failed", 401));
     }
 
-    // After successful verification, remove the challenge
-    await cacheService.del(`auth_challenge:${address}`);
-
-    // Check if user exists or create a new one
-    let user = await User.findOne({ address });
-    if (!user) {
-      user = await User.create({
-        address,
-        username: "New Artist",
-        bio: "Just joined Muse marketplace",
-      });
-    }
+    const user = verificationResult.user!;
 
     // Generate JWT
     const token = jwt.sign(
       {
         address: user.address,
-        id: user._id,
+        id: user.id,
       },
       JWT_SECRET,
       { expiresIn: TOKEN_EXPIRY },
@@ -81,14 +55,17 @@ export const login = async (
       data: {
         token,
         user: {
+          id: user.id,
           address: user.address,
           username: user.username,
-          profileImage: user.profileImage,
+          tier: user.tier,
+          isVerified: user.isVerified,
         },
+        isNewUser: verificationResult.isNewUser,
       },
     });
 
-    logger.info(`User logged in successfully: ${address}`);
+    logger.info(`User authenticated successfully: ${address}, tier: ${user.tier}`);
   } catch (error) {
     logger.error("Login failed:", error);
     next(createError("Authentication failed", 500));
@@ -96,7 +73,7 @@ export const login = async (
 };
 
 /**
- * Placeholder for fetching a challenge/nonce for more secure login
+ * Generate a verification challenge for wallet signature
  */
 export const getChallenge = async (
   req: Request,
@@ -106,16 +83,24 @@ export const getChallenge = async (
   try {
     const { address } = req.query as { address: string };
 
-    // Generate a random nonce
-    const nonce = `Muse Authentication Challenge: ${Math.random().toString(36).substring(2, 15)} at ${Date.now()}`;
+    if (!address) {
+      return next(createError("Address is required", 400));
+    }
 
-    // Store in cache with 5 minute TTL (300 seconds)
-    await cacheService.set(`auth_challenge:${address}`, nonce, 300);
+    // Generate verification challenge using our service
+    const challenge = verificationService.generateChallenge(address);
 
     res.json({
       success: true,
-      data: { challenge: nonce },
+      data: {
+        challenge: challenge.message,
+        nonce: challenge.nonce,
+        expiresAt: challenge.expiresAt,
+        timestamp: challenge.timestamp
+      },
     });
+
+    logger.info(`Verification challenge generated for address: ${address}`);
   } catch (error) {
     logger.error("Failed to generate challenge:", error);
     next(createError("Failed to generate authentication challenge", 500));
