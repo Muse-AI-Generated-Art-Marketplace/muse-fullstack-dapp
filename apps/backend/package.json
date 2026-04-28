@@ -11,9 +11,11 @@
     "lint": "eslint src --ext .ts",
     "lint:fix": "eslint src --ext .ts --fix",
     "migrate": "tsx migrationScripts/run.ts up",
+    "migrate:dry-run": "tsx migrationScripts/run.ts dry-run",
     "migrate:rollback": "tsx migrationScripts/run.ts down",
     "migrate:status": "tsx migrationScripts/run.ts status",
-    "migrate:run": "tsx migrationScripts/run.ts run"
+    "migrate:run": "tsx migrationScripts/run.ts run",
+    "migrate:create": "tsx migrationScripts/create.ts"
   },
   "dependencies": {
     "@types/jsonwebtoken": "^9.0.10",
