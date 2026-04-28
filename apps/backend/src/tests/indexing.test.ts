@@ -4,7 +4,6 @@ import { Artwork, User, Transaction } from '@/models'
 
 describe('Database Indexing', () => {
   beforeAll(async () => {
-    // Connect to test database
     const mongoUri = process.env.MONGODB_TEST_URI || 'mongodb://localhost:27017/muse-test'
     await mongoose.connect(mongoUri)
   })
@@ -14,16 +13,22 @@ describe('Database Indexing', () => {
   })
 
   beforeEach(async () => {
-    // Clean up collections before each test
     await Artwork.deleteMany({})
     await User.deleteMany({})
     await Transaction.deleteMany({})
   })
 
+  // ─── Artwork Indexes ────────────────────────────────────────────────────────
+
   describe('Artwork Indexes', () => {
     it('should have creator index', async () => {
       const indexes = await Artwork.collection.getIndexes()
       expect(indexes).toHaveProperty('creator_1')
+    })
+
+    it('should have owner index', async () => {
+      const indexes = await Artwork.collection.getIndexes()
+      expect(indexes).toHaveProperty('owner_1')
     })
 
     it('should have compound creator and createdAt index', async () => {
@@ -51,9 +56,13 @@ describe('Database Indexing', () => {
       expect(indexes).toHaveProperty('createdAt_-1')
     })
 
-    it('should have text search index', async () => {
+    it('should have text search index on title and description', async () => {
       const indexes = await Artwork.collection.getIndexes()
-      expect(indexes).toHaveProperty('title_text_description_text')
+      // MongoDB names the text index after all indexed fields
+      const hasTextIndex = Object.keys(indexes).some(
+        (k) => k.includes('title_text') && k.includes('description_text')
+      )
+      expect(hasTextIndex).toBe(true)
     })
 
     it('should have aiModel and createdAt compound index', async () => {
@@ -73,11 +82,20 @@ describe('Database Indexing', () => {
     })
   })
 
+  // ─── User Indexes ────────────────────────────────────────────────────────────
+
   describe('User Indexes', () => {
-    it('should have unique publicKey index', async () => {
+    it('should have unique address index', async () => {
+      const indexes = await User.collection.getIndexes()
+      expect(indexes).toHaveProperty('address_1')
+      expect(indexes['address_1'].unique).toBe(true)
+    })
+
+    it('should have unique sparse publicKey index', async () => {
       const indexes = await User.collection.getIndexes()
       expect(indexes).toHaveProperty('publicKey_1')
       expect(indexes['publicKey_1'].unique).toBe(true)
+      expect(indexes['publicKey_1'].sparse).toBe(true)
     })
 
     it('should have unique sparse username index', async () => {
@@ -114,6 +132,8 @@ describe('Database Indexing', () => {
       expect(indexes).toHaveProperty('createdAt_-1')
     })
   })
+
+  // ─── Transaction Indexes ─────────────────────────────────────────────────────
 
   describe('Transaction Indexes', () => {
     it('should have unique hash index', async () => {
@@ -163,117 +183,109 @@ describe('Database Indexing', () => {
     })
   })
 
+  // ─── Query Performance Tests ─────────────────────────────────────────────────
+
   describe('Query Performance Tests', () => {
     beforeEach(async () => {
-      // Create test data for performance testing
       const testUser = new User({
+        address: 'test-public-key',
         publicKey: 'test-public-key',
         username: 'testuser',
         email: 'test@example.com',
         stats: {
           artworksCreated: 10,
-          followers: 100
-        }
+          followers: 100,
+        },
       })
       await testUser.save()
 
-      // Create test artworks
       const artworks = Array.from({ length: 100 }, (_, i) => ({
         title: `Test Artwork ${i}`,
         description: `Description for artwork ${i}`,
         imageUrl: `https://example.com/image${i}.jpg`,
         price: (i * 10).toString(),
-        creator: testUser.publicKey,
+        creator: 'test-public-key',
+        owner: 'test-public-key',
         category: 'abstract',
         isListed: i % 2 === 0,
-        aiModel: 'stable-diffusion'
+        aiModel: 'stable-diffusion',
       }))
       await Artwork.insertMany(artworks)
 
-      // Create test transactions
+      const insertedArtworks = await Artwork.find().lean()
       const transactions = Array.from({ length: 50 }, (_, i) => ({
         hash: `hash-${i}`,
         type: 'sale',
-        artwork: artworks[i % artworks.length]._id,
+        artwork: insertedArtworks[i % insertedArtworks.length]._id,
         from: 'from-address',
         to: 'to-address',
         price: '100',
+        currency: 'XLM',
         network: 'testnet',
-        status: 'completed'
+        status: 'completed',
       }))
       await Transaction.insertMany(transactions)
     })
 
     it('should efficiently query artworks by category and listing status', async () => {
       const startTime = Date.now()
-      
-      const query = { category: 'abstract', isListed: true }
-      const artworks = await Artwork.find(query)
+
+      const artworks = await Artwork.find({ category: 'abstract', isListed: true })
         .sort({ createdAt: -1 })
         .limit(20)
         .lean()
-      
-      const endTime = Date.now()
-      const queryTime = endTime - startTime
-      
+
+      const queryTime = Date.now() - startTime
       expect(artworks.length).toBeGreaterThan(0)
-      expect(queryTime).toBeLessThan(100) // Should complete in less than 100ms
+      expect(queryTime).toBeLessThan(100)
     })
 
     it('should efficiently query artworks by creator', async () => {
       const startTime = Date.now()
-      
+
       const artworks = await Artwork.find({ creator: 'test-public-key' })
         .sort({ createdAt: -1 })
         .limit(20)
         .lean()
-      
-      const endTime = Date.now()
-      const queryTime = endTime - startTime
-      
+
+      const queryTime = Date.now() - startTime
       expect(artworks.length).toBeGreaterThan(0)
       expect(queryTime).toBeLessThan(100)
     })
 
     it('should efficiently perform text search', async () => {
       const startTime = Date.now()
-      
+
       const artworks = await Artwork.find({ $text: { $search: 'Test' } })
         .sort({ score: { $meta: 'textScore' } })
         .limit(20)
         .lean()
-      
-      const endTime = Date.now()
-      const queryTime = endTime - startTime
-      
+
+      const queryTime = Date.now() - startTime
       expect(artworks.length).toBeGreaterThan(0)
-      expect(queryTime).toBeLessThan(200) // Text search might be slightly slower
+      expect(queryTime).toBeLessThan(200)
     })
 
-    it('should efficiently query user by publicKey', async () => {
+    it('should efficiently query user by address', async () => {
       const startTime = Date.now()
-      
-      const user = await User.findOne({ publicKey: 'test-public-key' }).lean()
-      
-      const endTime = Date.now()
-      const queryTime = endTime - startTime
-      
+
+      const user = await User.findOne({ address: 'test-public-key' }).lean()
+
+      const queryTime = Date.now() - startTime
       expect(user).toBeTruthy()
       expect(queryTime).toBeLessThan(50)
     })
 
     it('should efficiently query transactions by artwork', async () => {
-      const artwork = await Artwork.findOne()
+      const artwork = await Artwork.findOne().lean()
       const startTime = Date.now()
-      
+
       const transactions = await Transaction.find({ artwork: artwork!._id })
         .sort({ createdAt: -1 })
         .limit(20)
         .lean()
-      
-      const endTime = Date.now()
-      const queryTime = endTime - startTime
-      
+
+      const queryTime = Date.now() - startTime
       expect(transactions.length).toBeGreaterThan(0)
       expect(queryTime).toBeLessThan(100)
     })

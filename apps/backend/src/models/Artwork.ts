@@ -121,15 +121,28 @@ ArtworkSchema.virtual('artistInfo', {
   justOne: true
 })
 
+// Text search index — field order determines the index name MongoDB reports
 ArtworkSchema.index({ title: 'text', description: 'text', prompt: 'text', category: 'text' })
-ArtworkSchema.index({ creator: 1, isListed: 1 })
-ArtworkSchema.index({ category: 1, isListed: 1, createdAt: -1 })
-ArtworkSchema.index({ creator: 1, createdAt: -1 })
+
+// Single-field indexes for high-selectivity lookups
+ArtworkSchema.index({ creator: 1 })
+ArtworkSchema.index({ owner: 1 })
 ArtworkSchema.index({ price: 1 })
 ArtworkSchema.index({ createdAt: -1 })
+ArtworkSchema.index({ aiModel: 1, createdAt: -1 })
+
+// Compound indexes aligned with common query patterns
+ArtworkSchema.index({ creator: 1, isListed: 1 })
+ArtworkSchema.index({ owner: 1, isListed: 1 })
+ArtworkSchema.index({ category: 1, isListed: 1, createdAt: -1 })
+ArtworkSchema.index({ creator: 1, createdAt: -1 })
 ArtworkSchema.index({ price: 1, createdAt: -1 })
 ArtworkSchema.index({ category: 1, price: 1 })
 ArtworkSchema.index({ creator: 1, category: 1, createdAt: -1 })
+
+// Blockchain data indexes — sparse because not all artworks are minted
+ArtworkSchema.index({ 'blockchainData.network': 1 })
+ArtworkSchema.index({ 'blockchainData.tokenId': 1 }, { sparse: true })
 
 // Virtual relationships
 ArtworkSchema.virtual('transactions', {
