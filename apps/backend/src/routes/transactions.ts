@@ -1,5 +1,6 @@
 import express from 'express'
 import { transactionController } from '@/controllers/transactionController'
+import { exportController } from '@/controllers/exportController'
 import {
   createTransactionSchema,
   processTransactionSchema,
@@ -8,9 +9,11 @@ import {
   updateTransactionStatusSchema
 } from '@/schemas/transactionSchemas'
 import { validate } from '@/middleware/validate'
+import { authenticate } from '@/middleware/authMiddleware'
 
 const router = express.Router()
 
+router.get('/export', authenticate, exportController.exportTransactions)
 router.get('/', validate(transactionQuerySchema), transactionController.listTransactions)
 router.post('/', validate(createTransactionSchema), transactionController.createTransaction)
 router.get('/:id', validate(transactionIdParamSchema), transactionController.getTransaction)
