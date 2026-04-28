@@ -1,9 +1,13 @@
 import mongoose from 'mongoose'
+import { createLogger } from '@/utils/logger'
+import { Transaction, ITransaction } from '@/models/Transaction'
 import { Artwork } from '@/models/Artwork'
-import { ITransaction, Transaction } from '@/models/Transaction'
-import { createError, createNotFoundError, createValidationError } from '@/middleware/errorHandler'
-import cacheService from '@/services/cacheService'
 import { websocketService } from '@/services/websocketService'
+import cacheService from '@/services/cacheService'
+import { emailService } from '@/services/emailService'
+import { createValidationError, createNotFoundError, createError } from '@/middleware/errorHandler'
+
+const logger = createLogger('TransactionService')
 
 type TransactionStatus = ITransaction['status']
 
@@ -94,7 +98,7 @@ class TransactionService {
       websocketService.broadcastTransactionUpdate(transaction)
     } catch (error) {
       // Log error but don't fail the transaction creation
-      console.error('Failed to broadcast transaction update:', error)
+      logger.error('Failed to broadcast transaction update:', error)
     }
 
     return this.cacheTransaction(transaction)
@@ -285,15 +289,28 @@ class TransactionService {
       metadata: input.metadata
     })
 
-    await transaction.save()
+    await (transaction as any).save()
+    
+    // Send email notifications for completed transactions
+    if (nextStatus === 'completed') {
+      try {
+        await (transaction as any).populate('artwork')
+        await this.sendTransactionEmailNotifications(transaction)
+      } catch (error) {
+        // Log error but don't fail the status update
+        logger.error('Failed to send email notifications:', error)
+      }
+    }
     
     // Broadcast real-time update for status change
     try {
-      await transaction.populate('artwork')
+      if (!(transaction as any).populated('artwork')) {
+        await (transaction as any).populate('artwork')
+      }
       websocketService.broadcastTransactionUpdate(transaction)
     } catch (error) {
       // Log error but don't fail the status update
-      console.error('Failed to broadcast transaction status update:', error)
+      logger.error('Failed to broadcast transaction status update:', error)
     }
     
     return this.cacheTransaction(transaction)
@@ -301,7 +318,8 @@ class TransactionService {
 
   private isValidTransition(currentStatus: TransactionStatus, nextStatus: TransactionStatus): boolean {
     const transitions: Record<TransactionStatus, TransactionStatus[]> = {
-      pending: ['processing', 'completed', 'failed', 'cancelled'],
+      pending: ['confirming', 'processing', 'completed', 'failed', 'cancelled'],
+      confirming: ['processing', 'completed', 'failed', 'cancelled'],
       processing: ['completed', 'failed', 'cancelled'],
       completed: [],
       failed: [],
@@ -334,6 +352,43 @@ class TransactionService {
 
     await cacheService.set(this.getCacheKey(transaction._id.toString()), transaction, this.cacheTtl)
     return transaction
+  }
+
+  private async sendTransactionEmailNotifications(transaction: any): Promise<void> {
+    const artwork = transaction.artwork as any
+    if (!artwork) return
+
+    const emailData = {
+      artworkId: artwork._id?.toString(),
+      artworkTitle: artwork.title || 'Untitled Artwork',
+      price: transaction.price,
+      currency: transaction.currency,
+      transactionHash: transaction.hash
+    }
+
+    // Send sale notification to seller (from address)
+    if (transaction.type === 'sale') {
+      await emailService.sendEmailNotification(
+        transaction.from,
+        'sale',
+        {
+          ...emailData,
+          buyerAddress: transaction.to
+        }
+      )
+
+      // Send purchase notification to buyer (to address)
+      if (transaction.to) {
+        await emailService.sendEmailNotification(
+          transaction.to,
+          'purchase',
+          {
+            ...emailData,
+            sellerAddress: transaction.from
+          }
+        )
+      }
+    }
   }
 
   private getCacheKey(id: string): string {

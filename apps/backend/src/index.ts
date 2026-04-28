@@ -27,6 +27,7 @@ import jobRoutes from '@/routes/jobs'
 import notificationRoutes from '@/routes/notifications'
 import transactionRoutes from '@/routes/transactions'
 import analyticsRoutes from '@/routes/analytics'
+import bidRoutes from '@/routes/bidRoutes'
 import fileUploadRoutes from '@/routes/fileUpload'
 import databaseMetricsRoutes from '@/routes/databaseMetrics'
 import healthService from '@/services/healthService'
@@ -34,6 +35,7 @@ import cacheService from '@/services/cacheService'
 import { jobQueueService } from '@/services/jobQueueService'
 import { createLogger } from '@/utils/logger'
 import { websocketService } from '@/services/websocketService'
+import { emailService } from '@/services/emailService'
 import { ensureIndexes } from '@/scripts/ensureIndexes'
 import { runMigrations } from '@/services/migrationService'
 import adminRoutes from '@/routes/admin'
@@ -144,6 +146,7 @@ export function createApp() {
   app.use('/api/cache', cacheManagementRoutes)
   app.use('/api/database', databaseMetricsRoutes)
   app.use('/api/admin', adminRoutes)
+  app.use('/api/bids', bidRoutes)
 
   // ── 404 & Global Error Handlers ──────────────────────────────────────────────
   app.use(notFound)
@@ -178,6 +181,13 @@ export async function startServer() {
       logger.info('Job queue service initialized')
     } catch (error) {
       logger.warn('Job queue service initialization failed:', error)
+    }
+
+    try {
+      await emailService.initialize()
+      logger.info('Email service initialized')
+    } catch (error) {
+      logger.warn('Email service initialization failed:', error)
     }
   }
 
@@ -241,5 +251,7 @@ process.on('SIGINT', async () => {
   await shutdown('SIGINT')
   process.exit(0)
 })
+
+}
 
 export default app
