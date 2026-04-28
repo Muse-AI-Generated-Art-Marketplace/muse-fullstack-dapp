@@ -11,6 +11,14 @@ import {
   uploadArtworkImage,
 } from '@/controllers/fileUploadController'
 import { authenticate, optionalAuthenticate } from '@/middleware/authMiddleware'
+import { validate } from '@/middleware/validate'
+import {
+  deleteFileSchema,
+  getFileMetadataSchema,
+  getPresignedDownloadUrlSchema,
+  getPresignedUploadUrlSchema,
+  listFilesSchema
+} from '@/schemas'
 import {
   uploadSingle,
   uploadMultiple,
@@ -68,23 +76,23 @@ router.post(
 // ── File Management ───────────────────────────────────────────────────────────
 
 // Delete file
-router.delete('/:key', authenticate, deleteFile)
+router.delete('/:key', authenticate, validate(deleteFileSchema), deleteFile)
 
 // Get file metadata
-router.get('/:key/metadata', optionalAuthenticate, getFileMetadata)
+router.get('/:key/metadata', optionalAuthenticate, validate(getFileMetadataSchema), getFileMetadata)
 
 // Get presigned download URL
-router.get('/:key/download-url', optionalAuthenticate, getPresignedDownloadUrl)
+router.get('/:key/download-url', optionalAuthenticate, validate(getPresignedDownloadUrlSchema), getPresignedDownloadUrl)
 
 // ── Presigned URLs ─────────────────────────────────────────────────────────────
 
 // Get presigned upload URL (for client-side uploads)
-router.get('/presigned-url', authenticate, getPresignedUploadUrl)
+router.get('/presigned-url', authenticate, validate(getPresignedUploadUrlSchema), getPresignedUploadUrl)
 
 // ── File Management (Admin/Authenticated) ───────────────────────────────────────
 
 // List files in folder
-router.get('/list', authenticate, listFiles)
+router.get('/list', authenticate, validate(listFilesSchema), listFiles)
 
 // Get bucket information
 router.get('/bucket-info', authenticate, getBucketInfo)

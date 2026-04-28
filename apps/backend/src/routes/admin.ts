@@ -1,6 +1,14 @@
 import { Router } from 'express';
 import { adminController } from '@/controllers/adminController';
 import { authenticateAdmin } from '@/middleware/adminAuth';
+import { validate } from '@/middleware/validate';
+import {
+  getUserManagementSchema,
+  updateUserStatusSchema,
+  getSystemStatsSchema,
+  getContentModerationSchema,
+  moderateContentSchema
+} from '@/schemas';
 
 const router = Router();
 
