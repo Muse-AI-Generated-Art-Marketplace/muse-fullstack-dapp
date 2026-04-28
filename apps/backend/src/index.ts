@@ -5,6 +5,7 @@ import express from 'express'
 import mongoose from 'mongoose'
 
 import { database } from '@/config/database'
+import { corsOptions } from '@/config/cors'
 import { securityMiddleware } from '@/middleware/security'
 import { requestContext } from '@/middleware/requestContext'
 import { requestLogger } from '@/middleware/requestLogger'
@@ -50,24 +51,6 @@ const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/muse'
 
 export function createApp() {
   const app = express()
-
-  const allowedOrigins = process.env.CORS_ORIGINS
-    ? process.env.CORS_ORIGINS.split(',').map((origin) => origin.trim())
-    : [process.env.FRONTEND_URL || 'http://localhost:3000']
-
-  const corsOptions = {
-    origin: (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => {
-      if (!origin || allowedOrigins.includes('*') || allowedOrigins.includes(origin)) {
-        return callback(null, true)
-      }
-
-      callback(new Error('Not allowed by CORS'))
-    },
-    methods: ['GET', 'HEAD', 'PUT', 'PATCH', 'POST', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Origin', 'X-Requested-With', 'Content-Type', 'Accept', 'Authorization'],
-    credentials: true,
-    optionsSuccessStatus: 204
-  }
 
   app.use(cors(corsOptions))
   app.options('*', cors(corsOptions))
