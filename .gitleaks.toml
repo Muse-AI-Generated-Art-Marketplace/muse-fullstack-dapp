@@ -1,0 +1,77 @@
+# Gitleaks configuration for detecting secrets in code
+title = "gitleaks config"
+
+[extend]
+useDefault = true
+
+# Allowlist patterns (false positives)
+[[allowlists]]
+description = "Allow test files to have mock secrets"
+paths = [
+  '''tests''',
+  '''test''',
+  '''__tests__''',
+  '''mock''',
+  '''fixtures'''
+]
+
+[[allowlists]]
+description = "Allow example env files with placeholder secrets"
+paths = [
+  '''\.env\.example$'''
+]
+
+[[allowlists]]
+description = "Allow Node.js lockfiles"
+paths = [
+  '''package-lock\.json$''',
+  '''yarn\.lock$'''
+]
+
+# Custom rules for detecting project-specific secrets
+
+[[rules]]
+description = "Detect JWT Secret"
+regex = '''(?i)jwt[_\s-]?secret[^\w]'''
+tags = ["secret", "jwt"]
+[[rules.entropies]]
+Min = "3.0"
+Max = "5.0"
+
+[[rules]]
+description = "Detect API Keys"
+regex = '''(?i)(api[_\s-]?key|api[_\s-]?secret)[^\w]'''
+tags = ["secret", "api"]
+[[rules.entropies]]
+Min = "3.0"
+Max = "5.0"
+
+[[rules]]
+description = "Detect MongoDB Connection Strings"
+regex = '''mongodb(\+srv)?://[^\s]+'''
+tags = ["database", "connection-string"]
+
+[[rules]]
+description = "Detect Redis URLs"
+regex = '''redis://[^\s]+'''
+tags = ["database", "cache"]
+
+[[rules]]
+description = "Detect OpenAI API Keys"
+regex = '''sk-[a-zA-Z0-9]{32,}'''
+tags = ["ai", "openai"]
+
+[[rules]]
+description = "Detect Stability AI API Keys"
+regex = '''sk-[a-zA-Z0-9]{20,}'''
+tags = ["ai", "stability"]
+
+[[rules]]
+description = "Detect AWS credentials"
+regex = '''(A3T[A-Z0-9]|AKIA|AGPA|AIDA|AROA|AIPA|ANPA|ANVA|ASIA)[A-Z0-9]{16}'''
+tags = ["cloud", "aws"]
+
+[[rules]]
+description = "Detect generic high entropy strings (possible secrets)"
+regex = '''[A-Za-z0-9_/+]{30,}={0,2}'''
+tags = ["secret", "high-entropy"]

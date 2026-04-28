@@ -37,13 +37,20 @@ class JobQueueService {
 
     try {
       // Initialize Redis connection for Bull queues
-      this.redisClient = Redis.createClient({
-        host: process.env.REDIS_HOST || 'localhost',
-        port: parseInt(process.env.REDIS_PORT || '6379'),
-        password: process.env.REDIS_PASSWORD,
-        db: parseInt(process.env.REDIS_DB || '1') // Use different DB for jobs
-      })
+      const redisOptions: any = {
+        socket: {
+          host: process.env.REDIS_HOST || 'localhost',
+          port: parseInt(process.env.REDIS_PORT || '6379')
+        }
+      }
+      if (process.env.REDIS_PASSWORD) {
+        redisOptions.password = process.env.REDIS_PASSWORD
+      }
+      if (process.env.REDIS_DB) {
+        redisOptions.database = parseInt(process.env.REDIS_DB)
+      }
 
+      this.redisClient = Redis.createClient(redisOptions)
       await this.redisClient.connect()
 
       // Initialize queues for different job types
@@ -191,7 +198,8 @@ class JobQueueService {
   async processJob(type: JobType, processor: (job: Job) => Promise<JobResult>): Promise<void> {
     const queue = this.queues.get(type)
     if (!queue) {
-      throw new Error(`Queue not found for job type: ${type}`)
+      logger.warn(`Queue not found for job type: ${type}. Processor will be registered when queue is created.`)
+      return
     }
 
     queue.process(async (job: Job) => {

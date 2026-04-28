@@ -9,15 +9,18 @@ import { AuthRequest } from './authMiddleware'
 export const standardLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: (req: AuthRequest) => {
-    const tier = req.user?.tier || 'free'
-    return TIER_LIMITS[tier as keyof typeof TIER_LIMITS].max
+    const tier = req.user?.tier || 'anonymous'
+    const limits = TIER_LIMITS[tier as keyof typeof TIER_LIMITS] || TIER_LIMITS.anonymous
+    return limits.max
   },
   keyGenerator: (req: AuthRequest) => {
+    // Priority: User Address > IP Address
     return req.user?.address || req.ip || 'anonymous'
   },
   message: (req: AuthRequest) => {
-    const tier = req.user?.tier || 'free'
-    return TIER_LIMITS[tier as keyof typeof TIER_LIMITS].message
+    const tier = req.user?.tier || 'anonymous'
+    const limits = TIER_LIMITS[tier as keyof typeof TIER_LIMITS] || TIER_LIMITS.anonymous
+    return limits.message
   },
   standardHeaders: true,
   legacyHeaders: false,
@@ -29,15 +32,17 @@ export const standardLimiter = rateLimit({
 export const aiGenerationLimiter = rateLimit({
   windowMs: 24 * 60 * 60 * 1000, // 24 hours
   max: (req: AuthRequest) => {
-    const tier = req.user?.tier || 'free'
-    return AI_GENERATION_LIMITS[tier as keyof typeof AI_GENERATION_LIMITS].max
+    const tier = req.user?.tier || 'anonymous'
+    const limits = AI_GENERATION_LIMITS[tier as keyof typeof AI_GENERATION_LIMITS] || AI_GENERATION_LIMITS.anonymous
+    return limits.max
   },
   keyGenerator: (req: AuthRequest) => {
     return req.user?.address || req.ip || 'anonymous'
   },
   message: (req: AuthRequest) => {
-    const tier = req.user?.tier || 'free'
-    return AI_GENERATION_LIMITS[tier as keyof typeof AI_GENERATION_LIMITS].message
+    const tier = req.user?.tier || 'anonymous'
+    const limits = AI_GENERATION_LIMITS[tier as keyof typeof AI_GENERATION_LIMITS] || AI_GENERATION_LIMITS.anonymous
+    return limits.message
   },
   standardHeaders: true,
   legacyHeaders: false,

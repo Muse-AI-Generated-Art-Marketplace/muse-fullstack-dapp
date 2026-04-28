@@ -12,7 +12,7 @@ export interface AuthRequest extends Request {
   user?: {
     id: string
     address: string
-    tier: 'free' | 'pro' | 'premium'
+    tier: 'anonymous' | 'free' | 'pro' | 'premium'
     [key: string]: any
   }
 }

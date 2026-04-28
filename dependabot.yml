@@ -1,0 +1,76 @@
+version: 2
+updates:
+  # Enable npm dependency updates
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 10
+    reviewers:
+      - "Muse-AI-Generated-Art-Marketplace/muse-fullstack-dapp-maintainers"
+    assignees:
+      - "maintainer"
+    labels:
+      - "dependencies"
+      - "security"
+    commit-message:
+      prefix: "deps"
+      include: "scope"
+
+  # Backend workspace
+  - package-ecosystem: "npm"
+    directory: "/apps/backend"
+    schedule:
+      interval: "weekly"
+      day: "tuesday"
+    open-pull-requests-limit: 5
+    reviewers:
+      - "Muse-AI-Generated-Art-Marketplace/muse-backend-team"
+    labels:
+      - "backend"
+      - "dependencies"
+      - "security"
+
+  # Frontend workspace
+  - package-ecosystem: "npm"
+    directory: "/apps/frontend"
+    schedule:
+      interval: "weekly"
+      day: "wednesday"
+    open-pull-requests-limit: 5
+    reviewers:
+      - "Muse-AI-Generated-Art-Marketplace/muse-frontend-team"
+    labels:
+      - "frontend"
+      - "dependencies"
+      - "security"
+
+  # Contracts workspace (if npm dependencies exist)
+  - package-ecosystem: "npm"
+    directory: "/packages/contracts"
+    schedule:
+      interval: "weekly"
+      day: "thursday"
+    open-pull-requests-limit: 5
+    labels:
+      - "contracts"
+      - "dependencies"
+      - "security"
+
+  # GitHub Actions
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "friday"
+    open-pull-requests-limit: 5
+    labels:
+      - "github-actions"
+      - "dependencies"
+
+registries:
+  npm:
+    type: npm-registry
+    url: https://registry.npmjs.org
+    # No authentication needed for public packages
