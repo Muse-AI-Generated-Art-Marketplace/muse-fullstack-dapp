@@ -8,6 +8,8 @@ import dotenv from 'dotenv'
 
 import { errorHandler } from '@/middleware/errorHandler'
 import { notFound } from '@/middleware/notFound'
+import { quotaMiddleware } from '@/middleware/quotaMiddleware'
+import { tracingMiddleware } from '@/middleware/tracingMiddleware'
 import cacheService from '@/services/cacheService'
 import { createLogger } from '@/utils/logger'
 import artworkRoutes from '@/routes/artwork'
@@ -16,6 +18,9 @@ import aiRoutes from '@/routes/ai'
 import metadataRoutes from '@/routes/metadata'
 import cacheRoutes from '@/routes/cache'
 import imageOptimizerRoutes from '@/routes/imageOptimizer'
+import quotaRoutes from '@/routes/quota'
+import tracingRoutes from '@/routes/tracing'
+import webhookRoutes from '@/routes/webhook'
 
 dotenv.config()
 
@@ -41,6 +46,13 @@ app.use(limiter)
 app.use(express.json({ limit: '10mb' }))
 app.use(express.urlencoded({ extended: true }))
 
+// Apply distributed tracing middleware
+app.use(tracingMiddleware({
+  excludePaths: ['/health'],
+  includeHeaders: false,
+  includeBody: false
+}))
+
 app.get('/health', (req, res) => {
   res.status(200).json({
     status: 'OK',
@@ -49,12 +61,16 @@ app.get('/health', (req, res) => {
   })
 })
 
-app.use('/api/artworks', artworkRoutes)
-app.use('/api/users', userRoutes)
-app.use('/api/ai', aiRoutes)
-app.use('/api/metadata', metadataRoutes)
-app.use('/api/cache', cacheRoutes)
-app.use('/api', imageOptimizerRoutes)
+// Apply quota middleware to API routes
+app.use('/api/artworks', quotaMiddleware({ cost: 1, feature: 'artwork_view' }), artworkRoutes)
+app.use('/api/users', quotaMiddleware({ cost: 1, feature: 'user_profile' }), userRoutes)
+app.use('/api/ai', quotaMiddleware({ cost: 5, feature: 'ai_generation' }), aiRoutes)
+app.use('/api/metadata', quotaMiddleware({ cost: 1 }), metadataRoutes)
+app.use('/api/cache', quotaMiddleware({ cost: 1 }), cacheRoutes)
+app.use('/api', quotaMiddleware({ cost: 1 }), imageOptimizerRoutes)
+app.use('/api/quota', quotaRoutes)
+app.use('/api/tracing', tracingRoutes)
+app.use('/api/webhooks', webhookRoutes)
 
 app.use(notFound)
 app.use(errorHandler)
