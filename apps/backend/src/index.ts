@@ -12,6 +12,7 @@ import { quotaMiddleware } from '@/middleware/quotaMiddleware'
 import { tracingMiddleware } from '@/middleware/tracingMiddleware'
 import cacheService from '@/services/cacheService'
 import { createLogger } from '@/utils/logger'
+import { connectDatabase, closeDatabaseConnection } from '@/database/connection'
 import artworkRoutes from '@/routes/artwork'
 import userRoutes from '@/routes/user'
 import aiRoutes from '@/routes/ai'
@@ -75,22 +76,43 @@ app.use('/api/webhooks', webhookRoutes)
 app.use(notFound)
 app.use(errorHandler)
 
-app.listen(PORT, () => {
-  logger.info(`🚀 Muse Backend API running on port ${PORT}`)
-  logger.info(`📊 Health check: http://localhost:${PORT}/health`)
-  logger.info(`🗄️ Cache stats: ${JSON.stringify(cacheService.getCacheStats())}`)
-})
+// Initialize database connection before starting server
+const startServer = async () => {
+  try {
+    // Connect to database
+    await connectDatabase()
+    logger.info('Database connected successfully')
+
+    app.listen(PORT, () => {
+      logger.info(`? Muse Backend API running on port ${PORT}`)
+      logger.info(`? Health check: http://localhost:${PORT}/health`)
+      logger.info(`? Cache stats: ${JSON.stringify(cacheService.getCacheStats())}`)
+    })
+  } catch (error) {
+    logger.error('Failed to start server:', error)
+    process.exit(1)
+  }
+}
+
+// Start the server
+startServer()
 
 // Graceful shutdown
 process.on('SIGTERM', async () => {
   logger.info('SIGTERM received, shutting down gracefully')
-  await cacheService.disconnect()
+  await Promise.all([
+    cacheService.disconnect(),
+    closeDatabaseConnection()
+  ])
   process.exit(0)
 })
 
 process.on('SIGINT', async () => {
   logger.info('SIGINT received, shutting down gracefully')
-  await cacheService.disconnect()
+  await Promise.all([
+    cacheService.disconnect(),
+    closeDatabaseConnection()
+  ])
   process.exit(0)
 })
 

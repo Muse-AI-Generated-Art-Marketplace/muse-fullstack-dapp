@@ -8,13 +8,14 @@ import {
 } from '@/middleware/errorHandler'
 import { invalidateArtworkCache } from '@/middleware/cacheMiddleware'
 import { createLogger } from '@/utils/logger'
+import { artworkService } from '@/services/artworkService'
 import { Artwork, ApiResponse, CreateArtworkRequest, ArtworkQueryParams } from '@/types'
 
 const logger = createLogger('ArtworkController')
 
 export const getArtworks = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { page = '1', limit = '20', category, sort } = req.query
+    const { page = '1', limit = '20', category, sort, creator, minPrice, maxPrice, isListed, search } = req.query
     
     // Validate query parameters
     const pageNum = parseInt(page as string)
@@ -41,41 +42,23 @@ export const getArtworks = async (req: Request, res: Response, next: NextFunctio
         }
       })
     }
-    
-    const artworks = [
-      {
-        id: '1',
-        title: 'AI Artwork #1',
-        description: 'Generated with AI Model',
-        imageUrl: 'https://example.com/image1.jpg',
-        price: '0.1',
-        currency: 'ETH',
-        creator: '0x1234...5678',
-        createdAt: new Date().toISOString(),
-        category: 'abstract',
-      },
-      {
-        id: '2',
-        title: 'AI Artwork #2',
-        description: 'Generated with AI Model',
-        imageUrl: 'https://example.com/image2.jpg',
-        price: '0.15',
-        currency: 'ETH',
-        creator: '0x8765...4321',
-        createdAt: new Date().toISOString(),
-        category: 'portrait',
-      },
-    ]
 
-    res.json({
-      success: true,
-      data: artworks,
-      pagination: {
-        page: pageNum,
-        limit: limitNum,
-        total: artworks.length,
-      },
+    // Use optimized artwork service with eager loading to prevent N+1 queries
+    const result = await artworkService.getArtworks({
+      page: page as string,
+      limit: limit as string,
+      category: category as string,
+      sort: sort as string,
+      creator: creator as string,
+      minPrice: minPrice as string,
+      maxPrice: maxPrice as string,
+      isListed: isListed as string,
+      search: search as string,
+      includeCreator: true,
+      includeOwner: false
     })
+
+    res.json(result)
   } catch (error) {
     logger.error('Error in getArtworks:', error)
     
@@ -117,20 +100,12 @@ export const getArtworkById = async (req: Request, res: Response, next: NextFunc
       })
     }
     
-    // Simulate artwork lookup - in real app, this would be a database query
-    const artwork = {
-      id,
-      title: `AI Artwork #${id}`,
-      description: 'Generated with AI Model',
-      imageUrl: `https://example.com/image${id}.jpg`,
-      price: '0.1',
-      currency: 'ETH',
-      creator: '0x1234...5678',
-      createdAt: new Date().toISOString(),
-      category: 'abstract',
-      prompt: 'A futuristic cityscape at sunset with flying cars and neon lights',
-      aiModel: 'Stable Diffusion v2.1',
-    }
+    // Use optimized artwork service with eager loading to prevent N+1 queries
+    const artwork = await artworkService.getArtworkById(id, {
+      includeCreator: true,
+      includeOwner: true,
+      includeMetadata: true
+    })
 
     res.json({
       success: true,
@@ -138,6 +113,11 @@ export const getArtworkById = async (req: Request, res: Response, next: NextFunc
     })
   } catch (error) {
     logger.error('Error in getArtworkById:', error)
+    
+    if (error instanceof Error && error.message === 'Artwork not found') {
+      const err = createNotFoundError('Artwork not found')
+      return next(err)
+    }
     
     const err = createError(
       'Unable to load artwork details',
@@ -151,7 +131,7 @@ export const getArtworkById = async (req: Request, res: Response, next: NextFunc
 
 export const createArtwork = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { title, description, imageUrl, price, prompt, aiModel } = req.body
+    const { title, description, imageUrl, price, category, prompt, aiModel, attributes } = req.body
     
     // Validate required fields
     const validationErrors: string[] = []
@@ -172,6 +152,10 @@ export const createArtwork = async (req: Request, res: Response, next: NextFunct
       validationErrors.push('Price is required')
     }
     
+    if (!category || category.trim() === '') {
+      validationErrors.push('Category is required')
+    }
+    
     // Validate price format
     if (price && isNaN(parseFloat(price))) {
       validationErrors.push('Price must be a valid number')
@@ -189,19 +173,21 @@ export const createArtwork = async (req: Request, res: Response, next: NextFunct
       })
     }
     
-    const artwork = {
-      id: Date.now().toString(),
+    // Get creator ID from authenticated user (for now using a placeholder)
+    // In a real implementation, this would come from authentication middleware
+    const creatorId = (req as any).user?.publicKey || '507f1f77bcf86cd799439011'
+    
+    // Use optimized artwork service with proper database operations
+    const artwork = await artworkService.createArtwork({
       title: title.trim(),
       description: description.trim(),
       imageUrl: imageUrl.trim(),
       price: price.trim(),
-      currency: 'ETH',
-      creator: '0x1234...5678',
-      createdAt: new Date().toISOString(),
-      category: 'ai-generated',
-      prompt: prompt?.trim() || '',
-      aiModel: aiModel?.trim() || 'Unknown',
-    }
+      category: category.trim(),
+      prompt: prompt?.trim(),
+      aiModel: aiModel?.trim(),
+      attributes
+    }, creatorId)
 
     res.status(201).json({
       success: true,
@@ -209,7 +195,7 @@ export const createArtwork = async (req: Request, res: Response, next: NextFunct
     })
 
     // Invalidate relevant caches after creating new artwork
-    invalidateArtworkCache().catch(error => 
+    invalidateArtworkCache(artwork.id).catch(error => 
       logger.error('Failed to invalidate cache after artwork creation:', error)
     )
   } catch (error) {
