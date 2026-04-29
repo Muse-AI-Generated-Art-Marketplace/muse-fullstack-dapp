@@ -10,6 +10,7 @@ import { errorHandler } from '@/middleware/errorHandler'
 import { notFound } from '@/middleware/notFound'
 import { quotaMiddleware } from '@/middleware/quotaMiddleware'
 import { tracingMiddleware } from '@/middleware/tracingMiddleware'
+import { analyticsMiddleware, errorAnalyticsMiddleware, performanceMiddleware } from '@/middleware/analyticsMiddleware'
 import cacheService from '@/services/cacheService'
 import { createLogger } from '@/utils/logger'
 import { connectDatabase, closeDatabaseConnection } from '@/database/connection'
@@ -22,6 +23,9 @@ import imageOptimizerRoutes from '@/routes/imageOptimizer'
 import quotaRoutes from '@/routes/quota'
 import tracingRoutes from '@/routes/tracing'
 import webhookRoutes from '@/routes/webhook'
+import analyticsRoutes from '@/routes/analytics'
+import analyticsService from '@/services/analyticsService'
+import realTimeMonitoringService from '@/services/realTimeMonitoringService'
 
 dotenv.config()
 
@@ -46,6 +50,18 @@ app.use(morgan('combined'))
 app.use(limiter)
 app.use(express.json({ limit: '10mb' }))
 app.use(express.urlencoded({ extended: true }))
+
+// Apply analytics middleware to track API calls
+app.use(analyticsMiddleware({
+  excludePaths: ['/health', '/metrics', '/api/analytics/health'],
+  sampleRate: process.env.NODE_ENV === 'production' ? 0.1 : 1.0
+}))
+
+// Apply performance monitoring
+app.use(performanceMiddleware({
+  enabled: true,
+  interval: 60000
+}))
 
 // Apply distributed tracing middleware
 app.use(tracingMiddleware({
@@ -72,6 +88,10 @@ app.use('/api', quotaMiddleware({ cost: 1 }), imageOptimizerRoutes)
 app.use('/api/quota', quotaRoutes)
 app.use('/api/tracing', tracingRoutes)
 app.use('/api/webhooks', webhookRoutes)
+app.use('/api/analytics', analyticsRoutes)
+
+// Apply error analytics middleware before error handler
+app.use(errorAnalyticsMiddleware)
 
 app.use(notFound)
 app.use(errorHandler)
@@ -87,6 +107,41 @@ const startServer = async () => {
       logger.info(`? Muse Backend API running on port ${PORT}`)
       logger.info(`? Health check: http://localhost:${PORT}/health`)
       logger.info(`? Cache stats: ${JSON.stringify(cacheService.getCacheStats())}`)
+      
+      // Start real-time monitoring service
+      try {
+        realTimeMonitoringService.start(8080)
+        logger.info('? Real-time monitoring service started on port 8080')
+      } catch (error) {
+        logger.error('Failed to start real-time monitoring service', { error })
+      }
+      
+      // Start analytics aggregation jobs
+      analyticsService.startPerformanceMonitoring(60000)
+      
+      // Schedule hourly aggregation
+      setInterval(() => {
+        analyticsService.aggregateHourlyAnalytics(new Date()).catch(error => {
+          logger.error('Failed to run hourly aggregation', { error })
+        })
+      }, 60 * 60 * 1000) // Every hour
+      
+      // Schedule daily aggregation
+      setInterval(() => {
+        analyticsService.aggregateDailyAnalytics(new Date()).catch(error => {
+          logger.error('Failed to run daily aggregation', { error })
+        })
+      }, 24 * 60 * 60 * 1000) // Every day
+      
+      // Schedule cleanup job (daily at 2 AM)
+      setInterval(() => {
+        const now = new Date()
+        if (now.getHours() === 2 && now.getMinutes() === 0) {
+          analyticsService.cleanupOldData(90).catch(error => {
+            logger.error('Failed to run cleanup job', { error })
+          })
+        }
+      }, 60 * 60 * 1000) // Check every hour
     })
   } catch (error) {
     logger.error('Failed to start server:', error)
@@ -102,7 +157,9 @@ process.on('SIGTERM', async () => {
   logger.info('SIGTERM received, shutting down gracefully')
   await Promise.all([
     cacheService.disconnect(),
-    closeDatabaseConnection()
+    closeDatabaseConnection(),
+    analyticsService.stopPerformanceMonitoring(),
+    realTimeMonitoringService.stop()
   ])
   process.exit(0)
 })
@@ -111,7 +168,9 @@ process.on('SIGINT', async () => {
   logger.info('SIGINT received, shutting down gracefully')
   await Promise.all([
     cacheService.disconnect(),
-    closeDatabaseConnection()
+    closeDatabaseConnection(),
+    analyticsService.stopPerformanceMonitoring(),
+    realTimeMonitoringService.stop()
   ])
   process.exit(0)
 })
