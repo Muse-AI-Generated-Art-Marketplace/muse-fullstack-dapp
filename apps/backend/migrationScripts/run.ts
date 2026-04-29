@@ -7,6 +7,8 @@ import {
   rollbackMigration,
   getMigrationStatus,
   runSpecificMigration,
+  rollbackToBatch,
+  validateMigrations,
 } from "../src/services/migrationService";
 import { createLogger } from "../src/utils/logger";
 
@@ -16,6 +18,10 @@ dotenv.config();
 
 const MONGODB_URI = process.env.MONGODB_URI || "mongodb://localhost:27017/muse";
 
+function parseDryRun(): boolean {
+  return process.argv.includes("--dry-run") || process.argv.includes("-d");
+}
+
 async function main() {
   try {
     // Connect to MongoDB
@@ -24,6 +30,11 @@ async function main() {
 
     const command = process.argv[2];
     const arg = process.argv[3];
+    const dryRun = parseDryRun();
+
+    if (dryRun) {
+      logger.info("🔍 DRY RUN MODE - No changes will be made");
+    }
 
     switch (command) {
       case "up":
@@ -67,7 +78,34 @@ async function main() {
           );
           process.exit(1);
         }
-        await runSpecificMigration(arg);
+        await runSpecificMigration(arg, { dryRun });
+        break;
+
+      case "batch":
+        if (!arg) {
+          logger.error(
+            "❌ Batch number required. Usage: npm run migrate:batch <batch-number>",
+          );
+          process.exit(1);
+        }
+        const batchNumber = parseInt(arg, 10);
+        if (isNaN(batchNumber)) {
+          logger.error("❌ Invalid batch number");
+          process.exit(1);
+        }
+        await rollbackToBatch(batchNumber, { dryRun });
+        break;
+
+      case "validate":
+        const result = await validateMigrations();
+        if (result.valid) {
+          logger.info("✅ All migrations are valid");
+          process.exit(0);
+        } else {
+          logger.error("❌ Migration validation failed");
+          result.issues.forEach(issue => logger.error(`  - ${issue}`));
+          process.exit(1);
+        }
         break;
 
       default:

@@ -6,6 +6,11 @@ import { contractUpgradeService } from '@/services/contractUpgradeService';
 import { AuthRequest } from '@/middleware/authMiddleware';
 import { createLogger } from '@/utils/logger';
 import {
+  getAllFeatureFlagMetadata,
+  getFeatureFlagMetadata,
+  isFeatureEnabled,
+} from '@/config/featureFlags';
+import {
   runMigrations,
   rollbackMigration,
   getMigrationStatus,
@@ -155,6 +160,38 @@ class AdminController {
       logger.error('Failed to get migration status', { error: error.message });
       return res.status(500).json({ message: 'Failed to get migration status.', error: error.message });
     }
+  }
+
+  /**
+   * GET /api/admin/feature-flags
+   * Returns the current feature flag configuration and evaluated state.
+   */
+  public async getFeatureFlags(req: AuthRequest, res: Response): Promise<Response> {
+    const flags = getAllFeatureFlagMetadata({
+      userId: req.user?.id,
+      ip: req.ip,
+    })
+
+    return res.status(200).json({ flags })
+  }
+
+  /**
+   * GET /api/admin/feature-flags/evaluate?feature=name&userId=...&ip=...
+   * Evaluates a single feature for a specific request context.
+   */
+  public async evaluateFeatureFlag(req: AuthRequest, res: Response): Promise<Response> {
+    const feature = String(req.query.feature || '').trim()
+    const userId = String(req.query.userId || req.user?.id || '')
+    const ip = String(req.query.ip || req.ip)
+
+    if (!feature) {
+      return res.status(400).json({ error: 'feature query parameter is required.' })
+    }
+
+    const evaluation = getFeatureFlagMetadata(feature, { userId, ip })
+    const enabled = isFeatureEnabled(feature, { userId, ip })
+
+    return res.status(200).json({ feature, enabled, evaluation })
   }
 }
 

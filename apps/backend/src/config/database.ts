@@ -31,32 +31,27 @@ export class DatabaseConnection {
       return
     }
 
+    const mongoUri = process.env.MONGODB_URI || process.env.DATABASE_URL || 'mongodb://localhost:27017/muse'
+
     try {
-      const mongoUri = process.env.MONGODB_URI || process.env.DATABASE_URL || 'mongodb://localhost:27017/muse'
-      
       await mongoose.connect(mongoUri, {
-        // Optimized connection pooling configuration
-        maxPoolSize: Math.max(10, Number(process.env.DB_MAX_POOL_SIZE) || 20), // Dynamic pool size based on env
-        minPoolSize: Math.max(2, Number(process.env.DB_MIN_POOL_SIZE) || 5),  // Minimum connections to maintain
-        maxIdleTimeMS: Number(process.env.DB_MAX_IDLE_TIME_MS) || 30000, // Close idle connections after 30s
-        serverSelectionTimeoutMS: Number(process.env.DB_SERVER_SELECTION_TIMEOUT_MS) || 5000, // Server selection timeout
-        socketTimeoutMS: Number(process.env.DB_SOCKET_TIMEOUT_MS) || 45000, // Socket operation timeout
-        connectTimeoutMS: Number(process.env.DB_CONNECT_TIMEOUT_MS) || 10000, // Initial connection timeout
-        heartbeatFrequencyMS: Number(process.env.DB_HEARTBEAT_FREQUENCY_MS) || 10000, // Heartbeat interval
-        bufferCommands: false, // Disable mongoose buffering for immediate errors
-        bufferMaxEntries: 0, // Disable mongoose buffering
-        waitQueueTimeoutMS: Number(process.env.DB_WAIT_QUEUE_TIMEOUT_MS) || 10000, // Connection wait timeout
-        retryWrites: true, // Retry write operations on failure
-        retryReads: true, // Retry read operations on failure
-        readPreference: (process.env.DB_READ_PREFERENCE as any) || 'primary', // Configurable read preference
+        maxPoolSize: Math.max(10, Number(process.env.DB_MAX_POOL_SIZE) || 20),
+        minPoolSize: Math.max(2, Number(process.env.DB_MIN_POOL_SIZE) || 5),
+        maxIdleTimeMS: Number(process.env.DB_MAX_IDLE_TIME_MS) || 30000,
+        serverSelectionTimeoutMS: Number(process.env.DB_SERVER_SELECTION_TIMEOUT_MS) || 5000,
+        socketTimeoutMS: Number(process.env.DB_SOCKET_TIMEOUT_MS) || 45000,
+        connectTimeoutMS: Number(process.env.DB_CONNECT_TIMEOUT_MS) || 10000,
+        heartbeatFrequencyMS: Number(process.env.DB_HEARTBEAT_FREQUENCY_MS) || 10000,
+        bufferCommands: false,
+        waitQueueTimeoutMS: Number(process.env.DB_WAIT_QUEUE_TIMEOUT_MS) || 10000,
+        retryWrites: true,
+        retryReads: true,
+        readPreference: (process.env.DB_READ_PREFERENCE as any) || 'primary',
         writeConcern: {
-          w: Number(process.env.DB_WRITE_CONCERN_W) || 'majority', // Write acknowledgment level
-          j: process.env.DB_WRITE_CONCERN_J !== 'false', // Journal writes (default true)
-          wtimeout: Number(process.env.DB_WRITE_CONCERN_TIMEOUT_MS) || 5000 // Write timeout
-        },
-        // Compression settings for better performance
-        compressors: ['snappy', 'zlib'],
-        zlibCompressionLevel: Number(process.env.DB_ZLIB_COMPRESSION_LEVEL) || 6
+          w: Number(process.env.DB_WRITE_CONCERN_W) || 'majority',
+          j: process.env.DB_WRITE_CONCERN_J !== 'false',
+          wtimeout: Number(process.env.DB_WRITE_CONCERN_TIMEOUT_MS) || 5000
+        }
       })
 
       this.isConnected = true
@@ -64,7 +59,6 @@ export class DatabaseConnection {
       this.connectionMetrics.activeConnections = mongoose.connection.readyState === 1 ? 1 : 0
       logger.info('Connected to MongoDB successfully')
 
-      // Set up connection event listeners
       mongoose.connection.on('error', (error: Error) => {
         logger.error('MongoDB connection error:', error)
         this.isConnected = false
@@ -73,7 +67,6 @@ export class DatabaseConnection {
           timestamp: new Date(),
           error: error.message
         })
-        // Keep only last 50 errors
         if (this.connectionMetrics.connectionErrors.length > 50) {
           this.connectionMetrics.connectionErrors = this.connectionMetrics.connectionErrors.slice(-50)
         }
@@ -90,9 +83,8 @@ export class DatabaseConnection {
       })
 
     } catch (error) {
-      logger.error('Failed to connect to MongoDB:', error)
+      logger.warn('MongoDB connection failed. Running in demo mode without database:', error instanceof Error ? error.message : error)
       this.isConnected = false
-      throw error
     }
   }
 
@@ -117,20 +109,23 @@ export class DatabaseConnection {
 
   public async healthCheck(): Promise<{ status: string; responseTime?: number }> {
     const startTime = Date.now()
-    
+
+    if (!this.isConnected || !mongoose.connection.db) {
+      return { status: 'unavailable' }
+    }
+
     try {
-      await mongoose.connection.db?.admin().ping()
+      await mongoose.connection.db.admin().ping()
       const responseTime = Date.now() - startTime
-      
-      // Update metrics
+
       this.connectionMetrics.lastHealthCheck = new Date()
       this.connectionMetrics.responseTimeHistory.push(responseTime)
       if (this.connectionMetrics.responseTimeHistory.length > 100) {
         this.connectionMetrics.responseTimeHistory = this.connectionMetrics.responseTimeHistory.slice(-100)
       }
-      this.connectionMetrics.averageResponseTime = 
+      this.connectionMetrics.averageResponseTime =
         this.connectionMetrics.responseTimeHistory.reduce((a, b) => a + b, 0) / this.connectionMetrics.responseTimeHistory.length
-      
+
       return {
         status: 'healthy',
         responseTime
@@ -145,38 +140,21 @@ export class DatabaseConnection {
   }
 
   public getConnectionPoolStats() {
-    const poolStats = {
+    return {
       readyState: mongoose.connection.readyState,
       host: mongoose.connection.host,
       port: mongoose.connection.port,
       name: mongoose.connection.name,
-      poolSize: 0,
-      maxPoolSize: 50,
-      minPoolSize: 5
+      isConnected: this.isConnected
     }
-
-    // Get detailed pool statistics if available
-    if (mongoose.connection.db) {
-      const admin = mongoose.connection.db.admin()
-      try {
-        const serverStatus = admin.serverStatus()
-        if (serverStatus && serverStatus.connections) {
-          poolStats.poolSize = serverStatus.connections.current || 0
-        }
-      } catch (error: any) {
-        logger.warn('Could not fetch pool statistics:', error)
-      }
-    }
-
-    return poolStats
   }
 
   public getConnectionMetrics() {
     return {
       ...this.connectionMetrics,
       connectionUptime: this.isConnected ? Date.now() - (this.connectionMetrics.lastHealthCheck?.getTime() || Date.now()) : 0,
-      errorRate: this.connectionMetrics.totalConnections > 0 
-        ? (this.connectionMetrics.failedConnections / this.connectionMetrics.totalConnections) * 100 
+      errorRate: this.connectionMetrics.totalConnections > 0
+        ? (this.connectionMetrics.failedConnections / this.connectionMetrics.totalConnections) * 100
         : 0,
       recentErrors: this.connectionMetrics.connectionErrors.slice(-10)
     }
@@ -196,5 +174,4 @@ export class DatabaseConnection {
   }
 }
 
-// Export singleton instance
 export const database = DatabaseConnection.getInstance()

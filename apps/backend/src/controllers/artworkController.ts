@@ -96,6 +96,8 @@ export const getArtworks = async (req: Request, res: Response, next: NextFunctio
       success: true,
       data: { artworks, total, page: pageNum, limit: limitNum, pages: Math.ceil(total / limitNum) },
     })
+
+    res.json(result)
   } catch (error) {
     log.error('Failed to fetch artworks', { error })
     next(createDatabaseError('Failed to fetch artworks'))

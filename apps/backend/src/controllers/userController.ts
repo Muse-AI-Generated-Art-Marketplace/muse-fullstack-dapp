@@ -5,6 +5,7 @@ import { User, IUser } from "@/models/User";
 import { Artwork } from "@/models/Artwork";
 import { Favorite } from "@/models/Favorite";
 import { Transaction } from "@/models/Transaction";
+import cacheService from "@/services/cacheService";
 
 const logger = createLogger("UserController");
 
@@ -308,53 +309,49 @@ export const getUserStats = async (
   try {
     const { address } = req.params;
 
-    const user = await User.findOne({ address });
+    const stats = await cacheService.getOrSet(
+      `user:stats:${address}`,
+      async () => {
+        const user = await User.findOne({ address });
+        if (!user) return null;
 
-    if (!user) {
-      const err = createError("User not found", 404, "NOT_FOUND");
-      return next(err);
-    }
+        const [createdCount, collectedCount, favoritesCount, totalSalesResult, totalPurchasesResult] =
+          await Promise.all([
+            Artwork.countDocuments({ creator: user._id }),
+            Artwork.countDocuments({ owner: user._id }),
+            Favorite.countDocuments({ user: user._id }),
+            Transaction.aggregate([
+              { $match: { from: user._id, type: "sale" } },
+              { $group: { _id: null, total: { $sum: "$amount" } } },
+            ]),
+            Transaction.aggregate([
+              { $match: { to: user._id, type: "sale" } },
+              { $group: { _id: null, total: { $sum: "$amount" } } },
+            ]),
+          ]);
 
-    const [createdCount, collectedCount, favoritesCount] = await Promise.all([
-      Artwork.countDocuments({ creator: user._id }),
-      Artwork.countDocuments({ owner: user._id }),
-      Favorite.countDocuments({ user: user._id }),
-    ]);
+        return {
+          created: createdCount,
+          collected: collectedCount,
+          favorites: favoritesCount,
+          followers: user.stats?.followers || 0,
+          following: user.stats?.following || 0,
+          totalSales: totalSalesResult[0]?.total?.toString() || "0",
+          totalPurchases: totalPurchasesResult[0]?.total?.toString() || "0",
+        };
+      },
+      300, // 5 minutes TTL
+    );
 
-    const totalSalesResult = await Transaction.aggregate([
-      { $match: { from: user._id, type: "sale" } },
-      { $group: { _id: null, total: { $sum: "$amount" } } },
-    ]);
-
-    const totalPurchasesResult = await Transaction.aggregate([
-      { $match: { to: user._id, type: "sale" } },
-      { $group: { _id: null, total: { $sum: "$amount" } } },
-    ]);
-
-    const stats = {
-      created: createdCount,
-      collected: collectedCount,
-      favorites: favoritesCount,
-      followers: user.stats?.followers || 0,
-      following: user.stats?.following || 0,
-      totalSales: totalSalesResult[0]?.total?.toString() || "0",
-      totalPurchases: totalPurchasesResult[0]?.total?.toString() || "0",
-    };
-
-    if (user.stats) {
-      user.stats = { ...user.stats, ...stats };
-      await user.save();
+    if (!stats) {
+      return next(createError("User not found", 404, "NOT_FOUND"));
     }
 
     log.info('User stats fetched', { address })
-    res.json({
-      success: true,
-      data: stats,
-    });
+    res.json({ success: true, data: stats });
   } catch (error) {
     logger.error("Error fetching user stats:", error);
-    const err = createError("Failed to fetch user stats", 500);
-    next(err);
+    next(createError("Failed to fetch user stats", 500));
   }
 };
 

@@ -1,4 +1,9 @@
 export const TIER_LIMITS = {
+  anonymous: {
+    windowMs: 15 * 60 * 1000,
+    max: 30,
+    message: 'Anonymous limit reached (30 req / 15 min). Please sign in for more.',
+  },
   free: {
     windowMs: 15 * 60 * 1000,
     max: 100,
@@ -17,6 +22,11 @@ export const TIER_LIMITS = {
 }
 
 export const AI_GENERATION_LIMITS = {
+  anonymous: {
+    windowMs: 24 * 60 * 60 * 1000,
+    max: 1,
+    message: 'Anonymous: daily AI generation limit reached (1 image). Sign in for more.',
+  },
   free: {
     windowMs: 24 * 60 * 60 * 1000,
     max: 5,

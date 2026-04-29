@@ -1,6 +1,7 @@
 import mongoose from "mongoose";
 import fs from "fs";
 import path from "path";
+import crypto from "crypto";
 import { createLogger } from "@/utils/logger";
 
 const logger = createLogger("MigrationService");
@@ -59,6 +60,93 @@ function computeChecksum(filepath: string): string {
   return Math.abs(hash).toString(16);
 }
 
+// Get or create migration lock collection
+async function getMigrationLockCollection() {
+  const db = mongoose.connection.db;
+  if (!db) {
+    throw new Error("Database connection not established");
+  }
+  return db.collection("migration_locks");
+}
+
+// Calculate checksum of a migration file
+function calculateChecksum(filepath: string): string {
+  const fileContent = fs.readFileSync(filepath, 'utf8');
+  return crypto.createHash('sha256').update(fileContent).digest('hex');
+}
+
+// Acquire migration lock to prevent concurrent migrations
+async function acquireLock(): Promise<boolean> {
+  const lockCollection = await getMigrationLockCollection();
+  const lockId = 'migration_lock';
+  const hostname = require('os').hostname();
+  const pid = process.pid;
+  const lockedBy = `${hostname}-${pid}`;
+
+  try {
+    const result = await lockCollection.findOneAndUpdate(
+      { _id: lockId },
+      {
+        $setOnInsert: {
+          _id: lockId,
+          locked: true,
+          lockedAt: new Date(),
+          lockedBy
+        }
+      },
+      { upsert: true, returnDocument: 'after' }
+    );
+
+    // Check if lock was already held by another process
+    if (result && result.locked && result.lockedBy !== lockedBy) {
+      const lockAge = Date.now() - new Date(result.lockedAt).getTime();
+      // If lock is older than 30 minutes, assume stale and take over
+      if (lockAge > 30 * 60 * 1000) {
+        await lockCollection.updateOne(
+          { _id: lockId },
+          { $set: { locked: true, lockedAt: new Date(), lockedBy } }
+        );
+        logger.info('⚠️  Acquired stale migration lock');
+        return true;
+      }
+      logger.warn('⚠️  Migration already in progress by another process');
+      return false;
+    }
+
+    return true;
+  } catch (error) {
+    logger.error('Failed to acquire migration lock:', error);
+    return false;
+  }
+}
+
+// Release migration lock
+async function releaseLock(): Promise<void> {
+  const lockCollection = await getMigrationLockCollection();
+  const lockId = 'migration_lock';
+
+  try {
+    await lockCollection.deleteOne({ _id: lockId });
+  } catch (error) {
+    logger.error('Failed to release migration lock:', error);
+  }
+}
+
+// Get next batch number
+async function getNextBatch(): Promise<number> {
+  const migrationsCollection = await getMigrationsCollection();
+  const lastMigration = await migrationsCollection
+    .find({})
+    .sort({ batch: -1 })
+    .limit(1)
+    .toArray();
+
+  if (lastMigration.length === 0) {
+    return 1;
+  }
+  return (lastMigration[0] as MigrationRecord).batch + 1;
+}
+
 /**
  * Get list of migration files
  */
@@ -101,6 +189,14 @@ export async function runMigrations(dryRun = false): Promise<MigrationResult[]> 
   try {
     logger.info(dryRun ? "🔍 Dry-run: checking pending migrations..." : "🔄 Starting migration process...");
 
+    // Acquire lock to prevent concurrent migrations
+    if (!dryRun) {
+      const lockAcquired = await acquireLock();
+      if (!lockAcquired) {
+        throw new Error("Could not acquire migration lock - another migration may be in progress");
+      }
+    }
+
     const migrationsCollection = await getMigrationsCollection();
     const migrationFiles = getMigrationFiles();
 
@@ -130,6 +226,8 @@ export async function runMigrations(dryRun = false): Promise<MigrationResult[]> 
     }
 
     let migrationsRun = 0;
+    const batch = await getNextBatch();
+
     for (const filename of migrationFiles) {
       if (executedMap.has(filename)) {
         logger.info(`⏭️  Skipping already executed migration: ${filename}`);
@@ -162,6 +260,12 @@ export async function runMigrations(dryRun = false): Promise<MigrationResult[]> 
         }
 
         await migration.up(mongoose.connection);
+        const executionTime = Date.now() - startTime;
+
+        // Calculate checksum
+        const migrationsDir = path.join(__dirname, "..", "migrations");
+        const filepath = path.join(migrationsDir, filename);
+        const checksum = calculateChecksum(filepath);
 
         const durationMs = Date.now() - start;
         const filepath = path.join(migrationsDir, filename);
@@ -197,6 +301,7 @@ export async function runMigrations(dryRun = false): Promise<MigrationResult[]> 
     return results;
   } catch (error) {
     logger.error("❌ Migration process failed:", error);
+    if (!dryRun) await releaseLock();
     throw error;
   }
 }
@@ -248,6 +353,7 @@ export async function rollbackMigration(steps = 1): Promise<MigrationResult[]> {
     return results;
   } catch (error) {
     logger.error("❌ Rollback process failed:", error);
+    if (!dryRun) await releaseLock();
     throw error;
   }
 }
@@ -331,8 +437,24 @@ export async function runSpecificMigration(
   try {
     logger.info(`🔄 Running specific migration: ${migrationName}`);
 
+    // Acquire lock to prevent concurrent migrations
+    if (!dryRun) {
+      const lockAcquired = await acquireLock();
+      if (!lockAcquired) {
+        throw new Error("Could not acquire migration lock - another migration may be in progress");
+      }
+    }
+
     const migrationsCollection = await getMigrationsCollection();
     const migrationsDir = path.join(__dirname, "..", "migrations");
+
+    // Check if migration already exists
+    const existing = await migrationsCollection.findOne({ name: migrationName });
+    if (existing) {
+      logger.warn(`⚠️  Migration ${migrationName} has already been executed`);
+      if (!dryRun) await releaseLock();
+      return;
+    }
 
     const migration = await loadMigration(migrationName);
 
@@ -341,6 +463,13 @@ export async function runSpecificMigration(
     }
 
     await migration.up(mongoose.connection);
+    const executionTime = Date.now() - startTime;
+
+    // Calculate checksum
+    const migrationsDir = path.join(__dirname, "..", "migrations");
+    const filepath = path.join(migrationsDir, migrationName);
+    const checksum = calculateChecksum(filepath);
+    const batch = await getNextBatch();
 
     const durationMs = Date.now() - start;
     const filepath = path.join(migrationsDir, migrationName);

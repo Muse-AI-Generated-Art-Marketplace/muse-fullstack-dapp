@@ -1,5 +1,12 @@
 import mongoose, { Document, Schema } from 'mongoose'
 
+export interface IRefreshToken {
+  tokenHash: string
+  family: string
+  expiresAt: Date
+  createdAt: Date
+}
+
 export interface IUser extends Document {
   address: string
   username: string
@@ -14,6 +21,7 @@ export interface IUser extends Document {
   discord?: string
   tier: 'free' | 'pro' | 'premium'
   isVerified: boolean
+  refreshTokens: IRefreshToken[]
   stats?: {
     artworks?: number
     sales?: number
@@ -62,6 +70,17 @@ const UserSchema: Schema = new Schema(
       default: 'free',
     },
     isVerified: { type: Boolean, default: false },
+    refreshTokens: {
+      type: [
+        {
+          tokenHash: { type: String, required: true },
+          family: { type: String, required: true },
+          expiresAt: { type: Date, required: true },
+          createdAt: { type: Date, default: Date.now },
+        },
+      ],
+      default: [],
+    },
     stats: {
       artworks: { type: Number, default: 0 },
       sales: { type: Number, default: 0 },
