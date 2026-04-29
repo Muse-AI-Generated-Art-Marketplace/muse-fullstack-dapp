@@ -12,7 +12,7 @@ module.exports = {
     'node-security'
   ],
   extends: [
-    '@typescript-eslint/recommended'
+    'plugin:@typescript-eslint/recommended'
   ],
   ignorePatterns: [
     'dist/',
