@@ -5,6 +5,7 @@ import express from 'express'
 import mongoose from 'mongoose'
 
 import { database } from '@/config/database'
+import { corsOptions } from '@/config/cors'
 import { securityMiddleware } from '@/middleware/security'
 import { addCDNHeaders, injectCDNConfig } from '@/middleware/cdnMiddleware'
 import { requestContext } from '@/middleware/requestContext'
@@ -33,6 +34,7 @@ import analyticsRoutes from '@/routes/analytics'
 import bidRoutes from '@/routes/bidRoutes'
 import fileUploadRoutes from '@/routes/fileUpload'
 import databaseMetricsRoutes from '@/routes/databaseMetrics'
+import rateLimitRoutes from '@/routes/rateLimit'
 import healthService from '@/services/healthService'
 import cacheService from '@/services/cacheService'
 import { jobQueueService } from '@/services/jobQueueService'
@@ -41,6 +43,7 @@ import { websocketService } from '@/services/websocketService'
 import { emailService } from '@/services/emailService'
 import { ensureIndexes } from '@/scripts/ensureIndexes'
 import { runMigrations } from '@/services/migrationService'
+import { redis } from '@/config/redis'
 import adminRoutes from '@/routes/admin'
 import cdnRoutes from '@/routes/cdn'
 import logsRoute from "./routes/logs";
@@ -55,24 +58,6 @@ const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/muse'
 
 export function createApp() {
   const app = express()
-
-  const allowedOrigins = process.env.CORS_ORIGINS
-    ? process.env.CORS_ORIGINS.split(',').map((origin) => origin.trim())
-    : [process.env.FRONTEND_URL || 'http://localhost:3000']
-
-  const corsOptions = {
-    origin: (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => {
-      if (!origin || allowedOrigins.includes('*') || allowedOrigins.includes(origin)) {
-        return callback(null, true)
-      }
-
-      callback(new Error('Not allowed by CORS'))
-    },
-    methods: ['GET', 'HEAD', 'PUT', 'PATCH', 'POST', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Origin', 'X-Requested-With', 'Content-Type', 'Accept', 'Authorization'],
-    credentials: true,
-    optionsSuccessStatus: 204
-  }
 
   app.use(cors(corsOptions))
   app.options('*', cors(corsOptions))
@@ -217,10 +202,20 @@ export async function startServer() {
   await ensureIndexes()
   logger.info('🔍 Database indexes verified and created')
 
+  // Initialize Redis for distributed rate limiting
+  try {
+    await redis.connect()
+    logger.info('🔴 Redis connected for distributed rate limiting')
+  } catch (error) {
+    logger.warn('Redis connection failed, rate limiting will use memory fallback:', error)
+  }
+
   if (process.env.NODE_ENV !== 'test') {
     try {
       await jobQueueService.initialize()
-      logger.info('Job queue service initialized')
+      const { registerAllJobProcessors } = await import('@/services/jobProcessors')
+      registerAllJobProcessors(jobQueueService)
+      logger.info('Job queue service initialized and processors registered')
     } catch (error) {
       logger.warn('Job queue service initialization failed:', error)
     }
@@ -283,6 +278,12 @@ async function shutdown(signal: string) {
     await cacheService.disconnect()
   } catch (error) {
     logger.warn('Cache disconnect encountered an error:', error)
+  }
+
+  try {
+    await redis.disconnect()
+  } catch (error) {
+    logger.warn('Redis disconnect encountered an error:', error)
   }
 
   try {

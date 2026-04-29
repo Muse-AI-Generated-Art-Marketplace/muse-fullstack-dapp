@@ -12,7 +12,7 @@ export interface AuthRequest extends Request {
   user?: {
     id: string
     address: string
-    tier: 'anonymous' | 'free' | 'pro' | 'premium'
+    tier: 'anonymous' | 'verified' | 'premium'
     [key: string]: any
   }
 }
@@ -38,7 +38,7 @@ export const authenticate = async (req: AuthRequest, res: Response, next: NextFu
     req.user = {
       id: user._id.toString(),
       address: user.address,
-      tier: user.tier as 'free' | 'pro' | 'premium'
+      tier: user.tier as 'verified' | 'premium'
     }
     next()
   } catch (error) {
@@ -63,7 +63,7 @@ export const optionalAuthenticate = async (req: AuthRequest, res: Response, next
       req.user = {
         id: user._id.toString(),
         address: user.address,
-        tier: user.tier as 'free' | 'pro' | 'premium'
+        tier: user.tier as 'verified' | 'premium'
       }
     }
     next()
