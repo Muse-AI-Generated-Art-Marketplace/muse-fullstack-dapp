@@ -1,6 +1,7 @@
 import mongoose, { Schema, Document } from 'mongoose'
 
 export interface IBid extends Document {
+  _id: mongoose.Types.ObjectId
   artwork: mongoose.Types.ObjectId
   bidder: string
   amount: string

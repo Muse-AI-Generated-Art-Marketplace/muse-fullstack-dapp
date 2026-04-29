@@ -7,6 +7,8 @@ import {
   rollbackMigration,
   getMigrationStatus,
   runSpecificMigration,
+  rollbackToBatch,
+  validateMigrations,
 } from "../src/services/migrationService";
 import { createLogger } from "../src/utils/logger";
 
@@ -16,6 +18,10 @@ dotenv.config();
 
 const MONGODB_URI = process.env.MONGODB_URI || "mongodb://localhost:27017/muse";
 
+function parseDryRun(): boolean {
+  return process.argv.includes("--dry-run") || process.argv.includes("-d");
+}
+
 async function main() {
   try {
     // Connect to MongoDB
@@ -24,17 +30,42 @@ async function main() {
 
     const command = process.argv[2];
     const arg = process.argv[3];
+    const dryRun = parseDryRun();
+
+    if (dryRun) {
+      logger.info("🔍 DRY RUN MODE - No changes will be made");
+    }
 
     switch (command) {
       case "up":
-      case "migrate":
-        await runMigrations();
+      case "migrate": {
+        const results = await runMigrations();
+        const failed = results.filter((r) => !r.success);
+        if (failed.length > 0) process.exit(1);
         break;
+      }
+
+      case "dry-run": {
+        const results = await runMigrations(true);
+        const invalid = results.filter((r) => !r.success);
+        if (invalid.length > 0) {
+          logger.error(`❌ ${invalid.length} invalid migration(s) found`);
+          process.exit(1);
+        }
+        break;
+      }
 
       case "down":
-      case "rollback":
-        await rollbackMigration();
+      case "rollback": {
+        // Optional: pass number of steps, e.g. `npm run migrate:rollback -- 3`
+        const steps = arg ? parseInt(arg, 10) : 1;
+        if (isNaN(steps) || steps < 1) {
+          logger.error("❌ Steps must be a positive integer");
+          process.exit(1);
+        }
+        await rollbackMigration(steps);
         break;
+      }
 
       case "status":
         await getMigrationStatus();
@@ -47,7 +78,34 @@ async function main() {
           );
           process.exit(1);
         }
-        await runSpecificMigration(arg);
+        await runSpecificMigration(arg, { dryRun });
+        break;
+
+      case "batch":
+        if (!arg) {
+          logger.error(
+            "❌ Batch number required. Usage: npm run migrate:batch <batch-number>",
+          );
+          process.exit(1);
+        }
+        const batchNumber = parseInt(arg, 10);
+        if (isNaN(batchNumber)) {
+          logger.error("❌ Invalid batch number");
+          process.exit(1);
+        }
+        await rollbackToBatch(batchNumber, { dryRun });
+        break;
+
+      case "validate":
+        const result = await validateMigrations();
+        if (result.valid) {
+          logger.info("✅ All migrations are valid");
+          process.exit(0);
+        } else {
+          logger.error("❌ Migration validation failed");
+          result.issues.forEach(issue => logger.error(`  - ${issue}`));
+          process.exit(1);
+        }
         break;
 
       default:
@@ -55,16 +113,22 @@ async function main() {
 📚 Database Migration CLI
 
 Usage:
-  npm run migrate              Run pending migrations
-  npm run migrate:rollback     Rollback the last migration
-  npm run migrate:status       Check migration status
-  npm run migrate:run <name>   Run a specific migration
+  npm run migrate                      Run all pending migrations
+  npm run migrate:dry-run              Validate pending migrations without executing
+  npm run migrate:rollback             Rollback the last migration
+  npm run migrate:rollback -- <steps>  Rollback the last N migrations
+  npm run migrate:status               Check migration status
+  npm run migrate:run <name>           Force-run a specific migration
+  npm run migrate:create <name>        Generate a new migration file
 
 Examples:
   npm run migrate
+  npm run migrate:dry-run
   npm run migrate:rollback
+  npm run migrate:rollback -- 3
   npm run migrate:status
-  npm run migrate:run 001_create_users_collection
+  npm run migrate:run 005_create_transactions_bids_auctions
+  npm run migrate:create add_user_email_field
         `);
     }
 

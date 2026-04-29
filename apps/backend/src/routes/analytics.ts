@@ -1,9 +1,18 @@
 import { Router, Request, Response, NextFunction } from 'express'
+import mongoose from 'mongoose'
 import { createLogger } from '@/utils/logger'
 import { analyticsService } from '@/services/analyticsService'
 import { analyticsCacheMiddleware } from '@/middleware/analyticsCache'
 import { authenticate, AuthRequest } from '@/middleware/authMiddleware'
 import { createError } from '@/middleware/errorHandler'
+import { validate } from '@/middleware/validate'
+import {
+  getAnalyticsSchema,
+  getUserAnalyticsSchema,
+  getArtworkAnalyticsSchema,
+  getTopArtworksSchema,
+  exportAnalyticsSchema
+} from '@/schemas'
 import rateLimit from 'express-rate-limit'
 import { AnalyticsQueryParams } from '@/models/Analytics'
 

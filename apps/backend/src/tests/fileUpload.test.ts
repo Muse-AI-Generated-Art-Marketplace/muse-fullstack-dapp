@@ -1,11 +1,16 @@
 import request from 'supertest'
-import { app } from '@/index'
-import { fileUploadService } from '@/services/fileUploadService'
-import Artwork from '@/models/Artwork'
+import { app } from '../index'
+import { fileUploadService } from '../services/fileUploadService'
+import { malwareScanService } from '../services/malwareScanService'
+import Artwork from '../models/Artwork'
 
 // Mock the file upload service
-jest.mock('@/services/fileUploadService')
+jest.mock('../services/fileUploadService')
 const mockFileUploadService = fileUploadService as jest.Mocked<typeof fileUploadService>
+
+// Mock the malware scan service
+jest.mock('../services/malwareScanService')
+const mockMalwareScanService = malwareScanService as jest.Mocked<typeof malwareScanService>
 
 // Mock AWS SDK
 jest.mock('aws-sdk', () => ({
@@ -53,6 +58,25 @@ jest.mock('aws-sdk', () => ({
 describe('File Upload Endpoints', () => {
   beforeEach(() => {
     jest.clearAllMocks()
+    
+    // Mock malware scan service to return clean results by default
+    mockMalwareScanService.scanFile.mockResolvedValue({
+      isClean: true,
+      threats: [],
+      scanDetails: {
+        signatureValid: true,
+        contentScan: {
+          maliciousPatterns: [],
+          suspiciousStrings: [],
+        },
+        metadata: {
+          fileHash: 'abc123',
+          size: 1024,
+          scanTime: 100,
+        },
+      },
+      riskLevel: 'low',
+    })
   })
 
   describe('POST /api/upload/single', () => {
@@ -72,7 +96,7 @@ describe('File Upload Endpoints', () => {
       const response = await request(app)
         .post('/api/upload/single')
         .set('Authorization', 'Bearer valid-token')
-        .attach('file', Buffer.from('test file content'), 'test.jpg')
+        .attach('file', Buffer.from([0xFF, 0xD8, 0xFF, 0xE0]), 'test.jpg')
         .expect(201)
 
       expect(response.body.success).toBe(true)
@@ -86,6 +110,7 @@ describe('File Upload Endpoints', () => {
           isPublic: true,
         })
       )
+      expect(mockMalwareScanService.scanFile).toHaveBeenCalled()
     })
 
     it('should reject upload when no file is provided', async () => {
@@ -112,6 +137,37 @@ describe('File Upload Endpoints', () => {
 
       expect(response.body.success).toBe(false)
       expect(response.body.error).toBe('File validation failed')
+    })
+
+    it('should reject upload when malware is detected', async () => {
+      mockMalwareScanService.scanFile.mockResolvedValue({
+        isClean: false,
+        threats: ['Malicious script detected'],
+        scanDetails: {
+          signatureValid: true,
+          contentScan: {
+            maliciousPatterns: ['Malicious script detected'],
+            suspiciousStrings: [],
+          },
+          metadata: {
+            fileHash: 'malicious123',
+            size: 1024,
+            scanTime: 150,
+          },
+        },
+        riskLevel: 'high',
+      })
+
+      const response = await request(app)
+        .post('/api/upload/single')
+        .set('Authorization', 'Bearer valid-token')
+        .attach('file', Buffer.from([0xFF, 0xD8, 0xFF, 0xE0]), 'malicious.jpg')
+        .expect(403)
+
+      expect(response.body.success).toBe(false)
+      expect(response.body.error).toBe('Malware detected')
+      expect(response.body.threats).toContain('Malicious script detected')
+      expect(response.body.riskLevel).toBe('high')
     })
   })
 

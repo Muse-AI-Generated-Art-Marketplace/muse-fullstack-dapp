@@ -1,6 +1,7 @@
 import mongoose, { Schema, Document } from 'mongoose'
 
 export interface ITransaction extends Document {
+  _id: mongoose.Types.ObjectId
   hash: string
   type: 'mint' | 'sale' | 'transfer' | 'bid' | 'cancel'
   artwork: mongoose.Types.ObjectId

@@ -255,13 +255,14 @@ describe('Security Headers', () => {
       expect(res.headers['content-security-policy']).toBeDefined()
     })
 
-    test('should work with compression middleware', async () => {
+    test('should compress responses when gzip is requested', async () => {
       const res = await request(app)
         .get('/health/simple')
         .set('Accept-Encoding', 'gzip')
-      
+
       expect(res.headers['x-frame-options']).toBe('DENY')
       expect(res.headers['content-security-policy']).toBeDefined()
+      expect(res.headers['content-encoding']).toContain('gzip')
     })
 
     test('should work with JSON parsing middleware', async () => {

@@ -1,55 +1,75 @@
 import rateLimit from 'express-rate-limit'
+import { Request, Response, NextFunction } from 'express'
 import { TIER_LIMITS, AI_GENERATION_LIMITS, AUTH_LIMITS } from '../config/rateLimitConfig'
 import { AuthRequest } from './authMiddleware'
+import { rateLimitService } from '../services/rateLimitService'
+import { createError } from './errorHandler'
+import { createLogger } from '@/utils/logger'
+
+const logger = createLogger('RateLimitMiddleware')
 
 /**
- * Standard rate limiter for general API endpoints.
+ * Redis-based distributed rate limiter for general API endpoints.
  * Dynamically adjusts limits based on user tier if authenticated.
  */
-export const standardLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: (req: AuthRequest) => {
-    const tier = req.user?.tier || 'anonymous'
-    const limits = TIER_LIMITS[tier as keyof typeof TIER_LIMITS] || TIER_LIMITS.anonymous
-    return limits.max
-  },
-  keyGenerator: (req: AuthRequest) => {
-    // Priority: User Address > IP Address
-    return req.user?.address || req.ip || 'anonymous'
-  },
-  message: (req: AuthRequest) => {
-    const tier = req.user?.tier || 'anonymous'
-    const limits = TIER_LIMITS[tier as keyof typeof TIER_LIMITS] || TIER_LIMITS.anonymous
-    return limits.message
-  },
-  standardHeaders: true,
-  legacyHeaders: false,
-})
+export const standardLimiter = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const result = await rateLimitService.checkRateLimit(req, 'standard')
+    
+    // Set rate limit headers
+    res.set({
+      'X-RateLimit-Limit': result.limit.toString(),
+      'X-RateLimit-Remaining': result.remaining.toString(),
+      'X-RateLimit-Reset': Math.ceil(result.resetTime.getTime() / 1000).toString(),
+      'X-RateLimit-Tier': result.tier
+    })
+
+    if (!result.allowed) {
+      const tier = req.user?.tier || 'anonymous'
+      const limits = TIER_LIMITS[tier as keyof typeof TIER_LIMITS] || TIER_LIMITS.anonymous
+      return next(createError(limits.message, 429))
+    }
+
+    next()
+  } catch (error) {
+    logger.error('Rate limiting error:', error)
+    // Fail open - allow the request if rate limiting fails
+    next()
+  }
+}
 
 /**
- * Stricter rate limiter for AI generation endpoints.
+ * Redis-based distributed rate limiter for AI generation endpoints.
  */
-export const aiGenerationLimiter = rateLimit({
-  windowMs: 24 * 60 * 60 * 1000, // 24 hours
-  max: (req: AuthRequest) => {
-    const tier = req.user?.tier || 'anonymous'
-    const limits = AI_GENERATION_LIMITS[tier as keyof typeof AI_GENERATION_LIMITS] || AI_GENERATION_LIMITS.anonymous
-    return limits.max
-  },
-  keyGenerator: (req: AuthRequest) => {
-    return req.user?.address || req.ip || 'anonymous'
-  },
-  message: (req: AuthRequest) => {
-    const tier = req.user?.tier || 'anonymous'
-    const limits = AI_GENERATION_LIMITS[tier as keyof typeof AI_GENERATION_LIMITS] || AI_GENERATION_LIMITS.anonymous
-    return limits.message
-  },
-  standardHeaders: true,
-  legacyHeaders: false,
-})
+export const aiGenerationLimiter = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const result = await rateLimitService.checkRateLimit(req, 'ai')
+    
+    // Set rate limit headers
+    res.set({
+      'X-RateLimit-Limit': result.limit.toString(),
+      'X-RateLimit-Remaining': result.remaining.toString(),
+      'X-RateLimit-Reset': Math.ceil(result.resetTime.getTime() / 1000).toString(),
+      'X-RateLimit-Tier': result.tier
+    })
+
+    if (!result.allowed) {
+      const tier = req.user?.tier || 'anonymous'
+      const limits = AI_GENERATION_LIMITS[tier as keyof typeof AI_GENERATION_LIMITS] || AI_GENERATION_LIMITS.anonymous
+      return next(createError(limits.message, 429))
+    }
+
+    next()
+  } catch (error) {
+    logger.error('AI generation rate limiting error:', error)
+    // Fail open - allow the request if rate limiting fails
+    next()
+  }
+}
 
 /**
  * Very strict rate limiter for authentication endpoints to prevent brute force.
+ * Uses traditional express-rate-limit for auth endpoints (IP-based only)
  */
 export const authLimiter = rateLimit({
   windowMs: AUTH_LIMITS.windowMs,
