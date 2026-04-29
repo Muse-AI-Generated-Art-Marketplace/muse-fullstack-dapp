@@ -1,0 +1,40 @@
+{
+  "nav": {
+    "explore": "Explorar",
+    "activity": "Actividad",
+    "mint": "Acuñar",
+    "profile": "Perfil",
+    "connect": "Conectar",
+    "connect_wallet": "Conectar Billetera",
+    "close_menu": "Cerrar menú principal",
+    "open_menu": "Abrir menú principal"
+  },
+  "artwork": {
+    "loading": "Cargando obra de arte...",
+    "not_found": "Obra de arte no encontrada",
+    "not_found_desc": "Lo sentimos, no pudimos encontrar la obra de arte que estás buscando.",
+    "breadcrumb_home": "Inicio",
+    "breadcrumb_explore": "Explorar",
+    "breadcrumb_artwork": "Obra de arte",
+    "details": "Detalles de la obra de arte",
+    "share_title": "Comparte esta obra de arte",
+    "share_action": "Compartir",
+    "tweet_action": "Tuitear",
+    "link_copied": "¡Enlace copiado al portapapeles!"
+  },
+  "common": {
+    "muse": "Muse",
+    "search_placeholder": "Buscar...",
+    "verification_page": "Página de Verificación del Problema #26"
+  },
+  "empty_state": {
+    "clear_filters": "Limpiar filtros",
+    "clear_filters_aria": "Limpiar todos los filtros activos",
+    "no_results_title": "No se encontraron obras de arte",
+    "no_results_desc": "Intenta ajustar tus filtros o términos de búsqueda para encontrar lo que buscas.",
+    "no_favorites_title": "Aún no hay favoritos",
+    "no_favorites_desc": "Dale un corazón a tus obras de arte de IA favoritas para guardarlas y apoyar a los artistas.",
+    "no_artworks_title": "No hay obras de arte disponibles",
+    "no_artworks_desc": "Sé el primero en acuñar y mostrar tu obra de arte generada por IA en el mercado."
+  }
+}

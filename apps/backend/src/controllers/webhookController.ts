@@ -1,677 +1,352 @@
-import { Request, Response } from 'express'
-import webhookService from '@/services/webhookService'
-import { createLogger } from '@/utils/logger'
-import { ApiResponse, Webhook, WebhookDelivery } from '@/types'
+import crypto from 'crypto'
+import axios from 'axios'
+import { Response, NextFunction } from 'express'
+import { AuthRequest } from '../middleware/authMiddleware'
+import { createError } from '../middleware/errorHandler'
+import Webhook, { WEBHOOK_EVENTS, WebhookEvent, IDeliveryAttempt } from '../models/Webhook'
+import { z } from 'zod'
 
-const logger = createLogger('WebhookController')
+// ---------------------------------------------------------------------------
+// Outgoing delivery constants
+// ---------------------------------------------------------------------------
 
-export const createWebhook = async (req: Request, res: Response) => {
+const MAX_RETRY_ATTEMPTS  = 3
+const RETRY_DELAYS_MS     = [0, 5_000, 30_000] // immediate, 5s, 30s
+const DELIVERY_TIMEOUT_MS = 10_000             // 10 s per attempt
+const MAX_DELIVERY_LOG    = 50                  // keep last N deliveries
+
+// ---------------------------------------------------------------------------
+// Validation schemas
+// ---------------------------------------------------------------------------
+
+const RegisterSchema = z.object({
+  url:    z.string().url('url must be a valid HTTPS URL'),
+  label:  z.string().max(100).optional(),
+  events: z
+    .array(z.enum(WEBHOOK_EVENTS))
+    .min(1, 'At least one event must be specified'),
+})
+
+const UpdateSchema = z.object({
+  url:      z.string().url().optional(),
+  label:    z.string().max(100).optional(),
+  events:   z.array(z.enum(WEBHOOK_EVENTS)).min(1).optional(),
+  isActive: z.boolean().optional(),
+})
+
+// ---------------------------------------------------------------------------
+// Signature helpers (outgoing)
+// ---------------------------------------------------------------------------
+
+/**
+ * Hash the raw secret for storage. We never store the plaintext so a DB
+ * breach cannot expose secrets registered by users.
+ */
+function hashSecret(raw: string): string {
+  return crypto.createHash('sha256').update(raw).digest('hex')
+}
+
+/**
+ * Sign an outgoing payload with HMAC-SHA256 using the RAW secret (not the
+ * hash). The signature is sent as `X-Muse-Signature: sha256=<hex>` so
+ * subscribers can verify authenticity.
+ */
+function signPayload(rawSecret: string, payload: string): string {
+  return (
+    'sha256=' +
+    crypto.createHmac('sha256', rawSecret).update(payload).digest('hex')
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Delivery
+// ---------------------------------------------------------------------------
+async function deliverToEndpoint(
+  url: string,
+  payload: string,
+  signatureHeader: string,
+  event: WebhookEvent,
+): Promise<IDeliveryAttempt[]> {
+  const attempts: IDeliveryAttempt[] = []
+
+  for (let i = 0; i < MAX_RETRY_ATTEMPTS; i++) {
+    if (i > 0) {
+      await new Promise((r) => setTimeout(r, RETRY_DELAYS_MS[i]))
+    }
+
+    const attempt: IDeliveryAttempt = {
+      attemptedAt: new Date(),
+      success:     false,
+    }
+
+    try {
+      const response = await axios.post(url, payload, {
+        timeout: DELIVERY_TIMEOUT_MS,
+        headers: {
+          'Content-Type':       'application/json',
+          'X-Muse-Event':       event,
+          'X-Muse-Signature':   signatureHeader,
+          'X-Muse-Timestamp':   Date.now().toString(),
+          'User-Agent':         'Muse-Webhook/1.0',
+        },
+        validateStatus: () => true, // handle all status codes ourselves
+      })
+
+      attempt.responseStatus = response.status
+      attempt.responseBody   = String(response.data).slice(0, 1000)
+      attempt.success        = response.status >= 200 && response.status < 300
+
+      attempts.push(attempt)
+
+      if (attempt.success) break // no need to retry on success
+    } catch (err: unknown) {
+      attempt.error   = err instanceof Error ? err.message : 'Unknown error'
+      attempt.success = false
+      attempts.push(attempt)
+    }
+  }
+
+  return attempts
+}
+
+// ---------------------------------------------------------------------------
+// Public API: trigger event (called internally by other controllers)
+// ---------------------------------------------------------------------------
+export async function triggerWebhookEvent(
+  userId: string,
+  event: WebhookEvent,
+  data: Record<string, unknown>,
+): Promise<void> {
+  const webhooks = await Webhook.find({ userId, isActive: true, events: event })
+
+  if (!webhooks.length) return
+
+  const payloadObj = {
+    event,
+    timestamp: new Date().toISOString(),
+    data,
+  }
+  const payloadStr = JSON.stringify(payloadObj)
+
+  await Promise.allSettled(
+    webhooks.map(async (webhook) => {
+
+      const signature = signPayload(webhook.secretHash, payloadStr)
+
+      const attempts = await deliverToEndpoint(
+        webhook.url,
+        payloadStr,
+        signature,
+        event,
+      )
+
+      // Append to delivery log, cap at MAX_DELIVERY_LOG
+      webhook.deliveryLog.push({ event, payload: payloadObj, attempts, createdAt: new Date() })
+      if (webhook.deliveryLog.length > MAX_DELIVERY_LOG) {
+        webhook.deliveryLog = webhook.deliveryLog.slice(-MAX_DELIVERY_LOG)
+      }
+
+      await webhook.save()
+    }),
+  )
+}
+
+// ---------------------------------------------------------------------------
+// REST handlers
+// ---------------------------------------------------------------------------
+
+export async function registerWebhook(
+  req: AuthRequest,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
   try {
-    const { url, events, secret, headers, retryConfig } = req.body
-    const userId = req.user?.publicKey
-
-    if (!userId) {
-      const response: ApiResponse = {
-        success: false,
-        error: {
-          code: 'UNAUTHORIZED',
-          message: 'User authentication required',
-          userMessage: 'Please provide your authentication credentials',
-          statusCode: 401
-        }
-      }
-      return res.status(401).json(response)
+    const parsed = RegisterSchema.safeParse(req.body)
+    if (!parsed.success) {
+      return next(createError(parsed.error.errors[0].message, 400))
     }
 
-    if (!url || !events || !Array.isArray(events) || events.length === 0) {
-      const response: ApiResponse = {
-        success: false,
-        error: {
-          code: 'INVALID_REQUEST',
-          message: 'URL and events array are required',
-          userMessage: 'Please provide a valid URL and at least one event type',
-          statusCode: 400
-        }
-      }
-      return res.status(400).json(response)
+    const { url, label, events } = parsed.data
+
+    // Reject non-HTTPS URLs in production
+    if (process.env.NODE_ENV === 'production' && !url.startsWith('https://')) {
+      return next(createError('Webhook URL must use HTTPS in production', 400))
     }
 
-    const webhookData = {
+    const rawSecret = crypto.randomBytes(32).toString('hex') // 64-char hex
+    const secretHash = hashSecret(rawSecret)
+
+    const webhook = await Webhook.create({
+      userId:     req.user!.id,
       url,
+      label,
       events,
-      secret,
-      headers,
-      retryConfig: retryConfig || {
-        maxRetries: 3,
-        retryDelay: 1000,
-        backoffMultiplier: 2,
-        maxRetryDelay: 30000
+      secretHash,
+    })
+
+    res.status(201).json({
+      message: 'Webhook registered. Save the secret — it will not be shown again.',
+      webhook: {
+        id:        webhook._id,
+        url:       webhook.url,
+        label:     webhook.label,
+        events:    webhook.events,
+        isActive:  webhook.isActive,
+        createdAt: webhook.createdAt,
       },
-      isActive: true,
-      userId
-    }
-
-    const webhook = await webhookService.createWebhook(webhookData)
-
-    const response: ApiResponse = {
-      success: true,
-      data: webhook,
-      message: 'Webhook created successfully'
-    }
-
-    res.status(201).json(response)
-  } catch (error) {
-    logger.error('Error creating webhook:', error)
-
-    const response: ApiResponse = {
-      success: false,
-      error: {
-        code: 'CREATE_WEBHOOK_ERROR',
-        message: 'Error creating webhook',
-        userMessage: 'Unable to create webhook. Please check your input and try again.',
-        statusCode: 500
-      }
-    }
-
-    res.status(500).json(response)
+      // Raw secret returned ONCE
+      secret: rawSecret,
+      signingNote:
+        'Sign verification: HMAC-SHA256(sha256(secret), payload). ' +
+        'See docs/webhooks.md for the full verification guide.',
+    })
+  } catch (err) {
+    next(err)
   }
 }
 
-export const getWebhooks = async (req: Request, res: Response) => {
+/**
+ * GET /api/webhooks
+ * List all webhooks for the authenticated user.
+ */
+export async function listWebhooks(
+  req: AuthRequest,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
   try {
-    const userId = req.user?.publicKey
-
-    if (!userId) {
-      const response: ApiResponse = {
-        success: false,
-        error: {
-          code: 'UNAUTHORIZED',
-          message: 'User authentication required',
-          userMessage: 'Please provide your authentication credentials',
-          statusCode: 401
-        }
-      }
-      return res.status(401).json(response)
-    }
-
-    const webhooks = await webhookService.getWebhooksForUser(userId)
-
-    const response: ApiResponse = {
-      success: true,
-      data: webhooks
-    }
-
-    res.json(response)
-  } catch (error) {
-    logger.error('Error getting webhooks:', error)
-
-    const response: ApiResponse = {
-      success: false,
-      error: {
-        code: 'GET_WEBHOOKS_ERROR',
-        message: 'Error retrieving webhooks',
-        userMessage: 'Unable to retrieve your webhooks',
-        statusCode: 500
-      }
-    }
-
-    res.status(500).json(response)
+    const webhooks = await Webhook.find({ userId: req.user!.id }).select(
+      '-secretHash -deliveryLog',
+    )
+    res.json({ webhooks })
+  } catch (err) {
+    next(err)
   }
 }
 
-export const getWebhook = async (req: Request, res: Response) => {
+/**
+ * GET /api/webhooks/:id
+ * Get a single webhook including recent delivery log.
+ */
+export async function getWebhook(
+  req: AuthRequest,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
   try {
-    const { id } = req.params
-    const userId = req.user?.publicKey
+    const webhook = await Webhook.findOne({
+      _id:    req.params.id,
+      userId: req.user!.id,
+    }).select('-secretHash')
 
-    if (!userId) {
-      const response: ApiResponse = {
-        success: false,
-        error: {
-          code: 'UNAUTHORIZED',
-          message: 'User authentication required',
-          userMessage: 'Please provide your authentication credentials',
-          statusCode: 401
-        }
-      }
-      return res.status(401).json(response)
-    }
+    if (!webhook) return next(createError('Webhook not found', 404))
 
-    const webhook = await webhookService.getWebhook(id)
-
-    if (!webhook) {
-      const response: ApiResponse = {
-        success: false,
-        error: {
-          code: 'WEBHOOK_NOT_FOUND',
-          message: 'Webhook not found',
-          userMessage: 'The requested webhook does not exist',
-          statusCode: 404
-        }
-      }
-      return res.status(404).json(response)
-    }
-
-    // Check if user owns this webhook
-    if (webhook.userId !== userId) {
-      const response: ApiResponse = {
-        success: false,
-        error: {
-          code: 'FORBIDDEN',
-          message: 'Access denied',
-          userMessage: 'You do not have permission to access this webhook',
-          statusCode: 403
-        }
-      }
-      return res.status(403).json(response)
-    }
-
-    const response: ApiResponse = {
-      success: true,
-      data: webhook
-    }
-
-    res.json(response)
-  } catch (error) {
-    logger.error('Error getting webhook:', error)
-
-    const response: ApiResponse = {
-      success: false,
-      error: {
-        code: 'GET_WEBHOOK_ERROR',
-        message: 'Error retrieving webhook',
-        userMessage: 'Unable to retrieve webhook information',
-        statusCode: 500
-      }
-    }
-
-    res.status(500).json(response)
+    res.json({ webhook })
+  } catch (err) {
+    next(err)
   }
 }
 
-export const updateWebhook = async (req: Request, res: Response) => {
+/**
+ * PATCH /api/webhooks/:id
+ * Update URL, label, events, or active state.
+ */
+export async function updateWebhook(
+  req: AuthRequest,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
   try {
-    const { id } = req.params
-    const { url, events, secret, headers, retryConfig, isActive } = req.body
-    const userId = req.user?.publicKey
-
-    if (!userId) {
-      const response: ApiResponse = {
-        success: false,
-        error: {
-          code: 'UNAUTHORIZED',
-          message: 'User authentication required',
-          userMessage: 'Please provide your authentication credentials',
-          statusCode: 401
-        }
-      }
-      return res.status(401).json(response)
+    const parsed = UpdateSchema.safeParse(req.body)
+    if (!parsed.success) {
+      return next(createError(parsed.error.errors[0].message, 400))
     }
 
-    const existingWebhook = await webhookService.getWebhook(id)
-    if (!existingWebhook) {
-      const response: ApiResponse = {
-        success: false,
-        error: {
-          code: 'WEBHOOK_NOT_FOUND',
-          message: 'Webhook not found',
-          userMessage: 'The requested webhook does not exist',
-          statusCode: 404
-        }
-      }
-      return res.status(404).json(response)
+    const { url, label, events, isActive } = parsed.data
+
+    if (url && process.env.NODE_ENV === 'production' && !url.startsWith('https://')) {
+      return next(createError('Webhook URL must use HTTPS in production', 400))
     }
 
-    // Check if user owns this webhook
-    if (existingWebhook.userId !== userId) {
-      const response: ApiResponse = {
-        success: false,
-        error: {
-          code: 'FORBIDDEN',
-          message: 'Access denied',
-          userMessage: 'You do not have permission to update this webhook',
-          statusCode: 403
-        }
-      }
-      return res.status(403).json(response)
-    }
+    const webhook = await Webhook.findOneAndUpdate(
+      { _id: req.params.id, userId: req.user!.id },
+      { $set: { ...(url && { url }), ...(label !== undefined && { label }), ...(events && { events }), ...(isActive !== undefined && { isActive }) } },
+      { new: true },
+    ).select('-secretHash -deliveryLog')
 
-    const updates: Partial<Webhook> = {}
-    if (url !== undefined) updates.url = url
-    if (events !== undefined) updates.events = events
-    if (secret !== undefined) updates.secret = secret
-    if (headers !== undefined) updates.headers = headers
-    if (retryConfig !== undefined) updates.retryConfig = retryConfig
-    if (isActive !== undefined) updates.isActive = isActive
+    if (!webhook) return next(createError('Webhook not found', 404))
 
-    const updatedWebhook = await webhookService.updateWebhook(id, updates)
-
-    const response: ApiResponse = {
-      success: true,
-      data: updatedWebhook,
-      message: 'Webhook updated successfully'
-    }
-
-    res.json(response)
-  } catch (error) {
-    logger.error('Error updating webhook:', error)
-
-    const response: ApiResponse = {
-      success: false,
-      error: {
-        code: 'UPDATE_WEBHOOK_ERROR',
-        message: 'Error updating webhook',
-        userMessage: 'Unable to update webhook. Please check your input and try again.',
-        statusCode: 500
-      }
-    }
-
-    res.status(500).json(response)
+    res.json({ webhook })
+  } catch (err) {
+    next(err)
   }
 }
 
-export const deleteWebhook = async (req: Request, res: Response) => {
+/**
+ * DELETE /api/webhooks/:id
+ * Remove a webhook registration.
+ */
+export async function deleteWebhook(
+  req: AuthRequest,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
   try {
-    const { id } = req.params
-    const userId = req.user?.publicKey
-
-    if (!userId) {
-      const response: ApiResponse = {
-        success: false,
-        error: {
-          code: 'UNAUTHORIZED',
-          message: 'User authentication required',
-          userMessage: 'Please provide your authentication credentials',
-          statusCode: 401
-        }
-      }
-      return res.status(401).json(response)
-    }
-
-    const webhook = await webhookService.getWebhook(id)
-    if (!webhook) {
-      const response: ApiResponse = {
-        success: false,
-        error: {
-          code: 'WEBHOOK_NOT_FOUND',
-          message: 'Webhook not found',
-          userMessage: 'The requested webhook does not exist',
-          statusCode: 404
-        }
-      }
-      return res.status(404).json(response)
-    }
-
-    // Check if user owns this webhook
-    if (webhook.userId !== userId) {
-      const response: ApiResponse = {
-        success: false,
-        error: {
-          code: 'FORBIDDEN',
-          message: 'Access denied',
-          userMessage: 'You do not have permission to delete this webhook',
-          statusCode: 403
-        }
-      }
-      return res.status(403).json(response)
-    }
-
-    await webhookService.deleteWebhook(id)
-
-    const response: ApiResponse = {
-      success: true,
-      message: 'Webhook deleted successfully'
-    }
-
-    res.json(response)
-  } catch (error) {
-    logger.error('Error deleting webhook:', error)
-
-    const response: ApiResponse = {
-      success: false,
-      error: {
-        code: 'DELETE_WEBHOOK_ERROR',
-        message: 'Error deleting webhook',
-        userMessage: 'Unable to delete webhook',
-        statusCode: 500
-      }
-    }
-
-    res.status(500).json(response)
+    const result = await Webhook.findOneAndDelete({
+      _id:    req.params.id,
+      userId: req.user!.id,
+    })
+    if (!result) return next(createError('Webhook not found', 404))
+    res.json({ message: 'Webhook deleted' })
+  } catch (err) {
+    next(err)
   }
 }
 
-export const testWebhook = async (req: Request, res: Response) => {
+/**
+ * POST /api/webhooks/:id/test
+ * Send a test ping to the registered endpoint.
+ */
+export async function testWebhook(
+  req: AuthRequest,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
   try {
-    const { id } = req.params
-    const { testEvent } = req.body
-    const userId = req.user?.publicKey
+    const webhook = await Webhook.findOne({
+      _id:    req.params.id,
+      userId: req.user!.id,
+    })
+    if (!webhook) return next(createError('Webhook not found', 404))
 
-    if (!userId) {
-      const response: ApiResponse = {
-        success: false,
-        error: {
-          code: 'UNAUTHORIZED',
-          message: 'User authentication required',
-          userMessage: 'Please provide your authentication credentials',
-          statusCode: 401
-        }
-      }
-      return res.status(401).json(response)
-    }
+    const payload = JSON.stringify({
+      event:     'webhook.test',
+      timestamp: new Date().toISOString(),
+      data:      { message: 'This is a test delivery from Muse.' },
+    })
+    const signature = signPayload(webhook.secretHash, payload)
 
-    const webhook = await webhookService.getWebhook(id)
-    if (!webhook) {
-      const response: ApiResponse = {
-        success: false,
-        error: {
-          code: 'WEBHOOK_NOT_FOUND',
-          message: 'Webhook not found',
-          userMessage: 'The requested webhook does not exist',
-          statusCode: 404
-        }
-      }
-      return res.status(404).json(response)
-    }
+    const attempts = await deliverToEndpoint(
+      webhook.url,
+      payload,
+      signature,
+      'artwork.created', // placeholder — test doesn't subscribe-check
+    )
 
-    // Check if user owns this webhook
-    if (webhook.userId !== userId) {
-      const response: ApiResponse = {
-        success: false,
-        error: {
-          code: 'FORBIDDEN',
-          message: 'Access denied',
-          userMessage: 'You do not have permission to test this webhook',
-          statusCode: 403
-        }
-      }
-      return res.status(403).json(response)
-    }
-
-    const result = await webhookService.testWebhook(id, testEvent)
-
-    const response: ApiResponse = {
-      success: true,
-      data: result,
-      message: result.success ? 'Webhook test successful' : 'Webhook test failed'
-    }
-
-    res.json(response)
-  } catch (error) {
-    logger.error('Error testing webhook:', error)
-
-    const response: ApiResponse = {
-      success: false,
-      error: {
-        code: 'TEST_WEBHOOK_ERROR',
-        message: 'Error testing webhook',
-        userMessage: 'Unable to test webhook',
-        statusCode: 500
-      }
-    }
-
-    res.status(500).json(response)
+    const success = attempts.some((a) => a.success)
+    res.status(success ? 200 : 502).json({ success, attempts })
+  } catch (err) {
+    next(err)
   }
 }
 
-export const getWebhookDeliveries = async (req: Request, res: Response) => {
-  try {
-    const { id } = req.params
-    const { limit = 50 } = req.query
-    const userId = req.user?.publicKey
-
-    if (!userId) {
-      const response: ApiResponse = {
-        success: false,
-        error: {
-          code: 'UNAUTHORIZED',
-          message: 'User authentication required',
-          userMessage: 'Please provide your authentication credentials',
-          statusCode: 401
-        }
-      }
-      return res.status(401).json(response)
-    }
-
-    const webhook = await webhookService.getWebhook(id)
-    if (!webhook) {
-      const response: ApiResponse = {
-        success: false,
-        error: {
-          code: 'WEBHOOK_NOT_FOUND',
-          message: 'Webhook not found',
-          userMessage: 'The requested webhook does not exist',
-          statusCode: 404
-        }
-      }
-      return res.status(404).json(response)
-    }
-
-    // Check if user owns this webhook
-    if (webhook.userId !== userId) {
-      const response: ApiResponse = {
-        success: false,
-        error: {
-          code: 'FORBIDDEN',
-          message: 'Access denied',
-          userMessage: 'You do not have permission to view deliveries for this webhook',
-          statusCode: 403
-        }
-      }
-      return res.status(403).json(response)
-    }
-
-    const deliveries = await webhookService.getWebhookDeliveries(id, parseInt(limit as string))
-
-    const response: ApiResponse = {
-      success: true,
-      data: deliveries
-    }
-
-    res.json(response)
-  } catch (error) {
-    logger.error('Error getting webhook deliveries:', error)
-
-    const response: ApiResponse = {
-      success: false,
-      error: {
-        code: 'GET_DELIVERIES_ERROR',
-        message: 'Error retrieving webhook deliveries',
-        userMessage: 'Unable to retrieve webhook delivery information',
-        statusCode: 500
-      }
-    }
-
-    res.status(500).json(response)
-  }
-}
-
-export const getWebhookStats = async (req: Request, res: Response) => {
-  try {
-    const userId = req.user?.publicKey
-
-    if (!userId) {
-      const response: ApiResponse = {
-        success: false,
-        error: {
-          code: 'UNAUTHORIZED',
-          message: 'User authentication required',
-          userMessage: 'Please provide your authentication credentials',
-          statusCode: 401
-        }
-      }
-      return res.status(401).json(response)
-    }
-
-    const stats = await webhookService.getWebhookStats(userId)
-
-    const response: ApiResponse = {
-      success: true,
-      data: stats
-    }
-
-    res.json(response)
-  } catch (error) {
-    logger.error('Error getting webhook stats:', error)
-
-    const response: ApiResponse = {
-      success: false,
-      error: {
-        code: 'GET_STATS_ERROR',
-        message: 'Error retrieving webhook statistics',
-        userMessage: 'Unable to retrieve webhook statistics',
-        statusCode: 500
-      }
-    }
-
-    res.status(500).json(response)
-  }
-}
-
-export const getAvailableEvents = async (req: Request, res: Response) => {
-  try {
-    const availableEvents = [
-      {
-        type: 'artwork.created',
-        description: 'Triggered when a new artwork is created',
-        dataSchema: {
-          artworkId: 'string',
-          creatorId: 'string',
-          title: 'string',
-          category: 'string'
-        }
-      },
-      {
-        type: 'artwork.sold',
-        description: 'Triggered when an artwork is sold',
-        dataSchema: {
-          artworkId: 'string',
-          sellerId: 'string',
-          buyerId: 'string',
-          price: 'string'
-        }
-      },
-      {
-        type: 'user.registered',
-        description: 'Triggered when a new user registers',
-        dataSchema: {
-          userId: 'string',
-          publicKey: 'string',
-          timestamp: 'number'
-        }
-      },
-      {
-        type: 'transaction.completed',
-        description: 'Triggered when a transaction is completed',
-        dataSchema: {
-          transactionId: 'string',
-          type: 'string',
-          amount: 'string',
-          status: 'string'
-        }
-      },
-      {
-        type: 'ai.generation.completed',
-        description: 'Triggered when AI art generation is completed',
-        dataSchema: {
-          generationId: 'string',
-          userId: 'string',
-          prompt: 'string',
-          imageUrl: 'string'
-        }
-      }
-    ]
-
-    const response: ApiResponse = {
-      success: true,
-      data: availableEvents
-    }
-
-    res.json(response)
-  } catch (error) {
-    logger.error('Error getting available events:', error)
-
-    const response: ApiResponse = {
-      success: false,
-      error: {
-        code: 'GET_EVENTS_ERROR',
-        message: 'Error retrieving available events',
-        userMessage: 'Unable to retrieve available events',
-        statusCode: 500
-      }
-    }
-
-    res.status(500).json(response)
-  }
-}
-
-// Admin endpoints
-export const getSystemWebhookStats = async (req: Request, res: Response) => {
-  try {
-    const stats = await webhookService.getWebhookStats()
-
-    const response: ApiResponse = {
-      success: true,
-      data: stats
-    }
-
-    res.json(response)
-  } catch (error) {
-    logger.error('Error getting system webhook stats:', error)
-
-    const response: ApiResponse = {
-      success: false,
-      error: {
-        code: 'GET_SYSTEM_STATS_ERROR',
-        message: 'Error retrieving system webhook statistics',
-        userMessage: 'Unable to retrieve system webhook statistics',
-        statusCode: 500
-      }
-    }
-
-    res.status(500).json(response)
-  }
-}
-
-export const cleanupDeliveries = async (req: Request, res: Response) => {
-  try {
-    const { maxAge } = req.body
-    
-    webhookService.cleanup(maxAge)
-
-    const response: ApiResponse = {
-      success: true,
-      message: 'Webhook delivery cleanup completed'
-    }
-
-    res.json(response)
-  } catch (error) {
-    logger.error('Error cleaning up webhook deliveries:', error)
-
-    const response: ApiResponse = {
-      success: false,
-      error: {
-        code: 'CLEANUP_ERROR',
-        message: 'Error cleaning up webhook deliveries',
-        userMessage: 'Unable to clean up webhook deliveries',
-        statusCode: 500
-      }
-    }
-
-    res.status(500).json(response)
-  }
-}
-
-export default {
-  createWebhook,
-  getWebhooks,
-  getWebhook,
-  updateWebhook,
-  deleteWebhook,
-  testWebhook,
-  getWebhookDeliveries,
-  getWebhookStats,
-  getAvailableEvents,
-  getSystemWebhookStats,
-  cleanupDeliveries
+/**
+ * GET /api/webhooks/events
+ * Return the list of supported event types — useful for integration UIs.
+ */
+export async function listEventTypes(
+  _req: AuthRequest,
+  res: Response,
+): Promise<void> {
+  res.json({ events: WEBHOOK_EVENTS })
 }

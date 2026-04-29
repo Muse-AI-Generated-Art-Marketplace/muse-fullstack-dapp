@@ -1,84 +1,48 @@
-import React from 'react'
+import { ReactNode } from 'react'
+import { cn } from '@/utils/cn'
 
-export interface GridProps {
-  children: React.ReactNode
+interface GridProps {
+  children: ReactNode
   columns?: 1 | 2 | 3 | 4 | 5 | 6
-  gap?: 'sm' | 'md' | 'lg'
+  gap?: 'sm' | 'md' | 'lg' | 'none'
   responsive?: boolean
   className?: string
 }
 
-export function Grid({
-  children,
-  columns = 1,
-  gap = 'md',
+export function Grid({ 
+  children, 
+  columns = 3, 
+  gap = 'md', 
   responsive = true,
   className = ''
 }: GridProps) {
-  const baseClasses = 'grid'
-  
-  const columnClasses = {
-    1: 'grid-cols-1',
-    2: 'grid-cols-2',
-    3: 'grid-cols-3',
-    4: 'grid-cols-4',
-    5: 'grid-cols-5',
-    6: 'grid-cols-6'
-  }
   
   const gapClasses = {
-    sm: 'gap-2',
-    md: 'gap-4',
-    lg: 'gap-6'
+    none: 'gap-0',
+    sm: 'gap-3',
+    md: 'gap-4 sm:gap-6',
+    lg: 'gap-6 sm:gap-8'
   }
 
-  const responsiveClasses = responsive
-    ? 'xs:grid-cols-2 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4'
-    : ''
-
-  const classes = [
-    baseClasses,
-    responsive ? responsiveClasses : columnClasses[columns],
-    gapClasses[gap],
-    responsive && 'px-4',
-    className
-  ].filter(Boolean).join(' ')
+  const columnClasses = {
+    1: 'grid-cols-1',
+    2: 'grid-cols-1 sm:grid-cols-2',
+    3: 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3',
+    4: 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-4',
+    5: 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-5',
+    6: 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-6',
+  }
 
   return (
-    <div className={classes}>
+    <div
+      className={cn(
+        'grid w-full',
+        responsive ? 'grid-responsive' : columnClasses[columns],
+        !responsive && gapClasses[gap],
+        className
+      )}
+    >
       {children}
     </div>
   )
-}
-
-export interface GridItemProps {
-  children: React.ReactNode
-  span?: 1 | 2 | 3 | 4 | 5 | 6
-  className?: string
-}
-
-export function GridItem({
-  children,
-  span = 1,
-  className = ''
-}: GridItemProps) {
-  const spanClasses = {
-    1: '',
-    2: 'col-span-2',
-    3: 'col-span-3',
-    4: 'col-span-4',
-    5: 'col-span-5',
-    6: 'col-span-6'
-  }
-
-  const classes = [
-    spanClasses[span],
-    className
-  ].filter(Boolean).join(' ')
-
-  return (
-    <div className={classes}>
-      {children}
-    </div>
-  )
-}
+}

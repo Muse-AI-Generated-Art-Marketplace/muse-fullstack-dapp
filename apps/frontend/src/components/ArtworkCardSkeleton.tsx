@@ -4,7 +4,12 @@ interface ArtworkCardSkeletonProps {
 
 export function ArtworkCardSkeleton({ className = '' }: ArtworkCardSkeletonProps) {
   return (
-    <div className={`card-mobile overflow-hidden ${className}`}>
+    <div 
+      className={`card-mobile overflow-hidden ${className}`}
+      role="status"
+      aria-label="Loading artwork"
+      aria-busy="true"
+    >
       <div className="aspect-square bg-secondary-100 animate-pulse" />
       <div className="p-4">
         <div className="h-5 bg-secondary-100 rounded animate-pulse mb-2" />
