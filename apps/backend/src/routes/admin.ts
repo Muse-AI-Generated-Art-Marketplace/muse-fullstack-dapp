@@ -9,20 +9,6 @@ import {
   getContentModerationSchema,
   moderateContentSchema
 } from '@/schemas';
-import {
-  getUserListSchema,
-  updateUserTierSchema,
-  resetUserRateLimitsSchema,
-  getUserRateLimitStatusSchema,
-  rateLimitStatsSchema
-} from '@/schemas/rateLimitSchemas';
-import {
-  getAllUsers,
-  updateUserTier,
-  getRateLimitStats,
-  resetUserRateLimits,
-  getUserRateLimitStatus
-} from '@/controllers/adminRateLimitController';
 import { Router } from "express";
 import { adminController } from "@/controllers/adminController";
 import { authenticateAdmin } from "@/middleware/adminAuth";
