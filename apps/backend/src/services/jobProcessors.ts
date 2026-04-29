@@ -5,22 +5,29 @@ import cacheService from './cacheService'
 
 const logger = createLogger('JobProcessors')
 
+import { aiService } from './ai'
+
 // AI Generation Job Processor
 export async function processAIGeneration(job: Job): Promise<JobResult> {
-  const { prompt, userId, style, dimensions } = job.data as JobData
+  const { prompt, userId, style, quality, model, dimensions } = job.data as JobData
   
   try {
-    logger.info(`Starting AI generation for user ${userId}`, { prompt, style, dimensions })
+    logger.info(`Starting real AI generation for user ${userId}`, { prompt, style, model })
     
-    // Simulate AI generation process (replace with actual AI service call)
-    await new Promise(resolve => setTimeout(resolve, 3000)) // Simulate processing time
+    const result = await aiService.generateImage({
+      prompt,
+      style,
+      quality,
+      size: dimensions
+    })
     
     const generatedImage = {
-      id: `img_${Date.now()}`,
-      url: `https://generated-images.example.com/${Date.now()}.png`,
+      id: result.generationId,
+      url: result.imageUrl || `https://generated-images.example.com/${Date.now()}.png`,
       prompt,
       style,
       dimensions,
+      provider: result.provider,
       createdAt: new Date()
     }
     
