@@ -38,15 +38,34 @@ async function main() {
 
     switch (command) {
       case "up":
-      case "migrate":
-        await runMigrations({ dryRun });
+      case "migrate": {
+        const results = await runMigrations();
+        const failed = results.filter((r) => !r.success);
+        if (failed.length > 0) process.exit(1);
         break;
+      }
+
+      case "dry-run": {
+        const results = await runMigrations(true);
+        const invalid = results.filter((r) => !r.success);
+        if (invalid.length > 0) {
+          logger.error(`❌ ${invalid.length} invalid migration(s) found`);
+          process.exit(1);
+        }
+        break;
+      }
 
       case "down":
-      case "rollback":
+      case "rollback": {
+        // Optional: pass number of steps, e.g. `npm run migrate:rollback -- 3`
         const steps = arg ? parseInt(arg, 10) : 1;
-        await rollbackMigration(steps, { dryRun });
+        if (isNaN(steps) || steps < 1) {
+          logger.error("❌ Steps must be a positive integer");
+          process.exit(1);
+        }
+        await rollbackMigration(steps);
         break;
+      }
 
       case "status":
         await getMigrationStatus();
@@ -94,26 +113,22 @@ async function main() {
 📚 Database Migration CLI
 
 Usage:
-  npm run migrate                    Run pending migrations
-  npm run migrate:rollback [steps]   Rollback last N migrations (default: 1)
-  npm run migrate:status             Check migration status
-  npm run migrate:run <name>         Run a specific migration
-  npm run migrate:batch <number>     Rollback to a specific batch
-  npm run migrate:validate           Validate migration checksums
-
-Options:
-  --dry-run, -d                     Preview changes without executing
+  npm run migrate                      Run all pending migrations
+  npm run migrate:dry-run              Validate pending migrations without executing
+  npm run migrate:rollback             Rollback the last migration
+  npm run migrate:rollback -- <steps>  Rollback the last N migrations
+  npm run migrate:status               Check migration status
+  npm run migrate:run <name>           Force-run a specific migration
+  npm run migrate:create <name>        Generate a new migration file
 
 Examples:
   npm run migrate
-  npm run migrate --dry-run
+  npm run migrate:dry-run
   npm run migrate:rollback
-  npm run migrate:rollback 3
+  npm run migrate:rollback -- 3
   npm run migrate:status
-  npm run migrate:run 001_create_users_collection
-  npm run migrate:batch 2
-  npm run migrate:validate
-  npm run migrate:rollback --dry-run
+  npm run migrate:run 005_create_transactions_bids_auctions
+  npm run migrate:create add_user_email_field
         `);
     }
 
