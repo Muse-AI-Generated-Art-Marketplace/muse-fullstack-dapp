@@ -1,23 +1,18 @@
 export const TIER_LIMITS = {
   anonymous: {
     windowMs: 15 * 60 * 1000,
-    max: 30,
-    message: 'Anonymous limit reached (30 req / 15 min). Please sign in for more.',
+    max: 5,
+    message: 'Anonymous limit reached (5 req / 15 min). Please sign in for more.',
   },
-  free: {
+  verified: {
     windowMs: 15 * 60 * 1000,
-    max: 100,
-    message: 'Free tier limit reached (100 req / 15 min). Upgrade to Pro for more.',
-  },
-  pro: {
-    windowMs: 15 * 60 * 1000,
-    max: 500,
-    message: 'Pro tier limit reached (500 req / 15 min).',
+    max: 15,
+    message: 'Verified user limit reached (15 req / 15 min). Upgrade to Premium for more.',
   },
   premium: {
     windowMs: 15 * 60 * 1000,
-    max: 2000,
-    message: 'Premium tier limit reached (2000 req / 15 min).',
+    max: 50,
+    message: 'Premium tier limit reached (50 req / 15 min).',
   },
 }
 
@@ -27,20 +22,15 @@ export const AI_GENERATION_LIMITS = {
     max: 1,
     message: 'Anonymous: daily AI generation limit reached (1 image). Sign in for more.',
   },
-  free: {
+  verified: {
     windowMs: 24 * 60 * 60 * 1000,
     max: 5,
-    message: 'Free tier: daily AI generation limit reached (5 images).',
-  },
-  pro: {
-    windowMs: 24 * 60 * 60 * 1000,
-    max: 50,
-    message: 'Pro tier: daily AI generation limit reached (50 images).',
+    message: 'Verified user: daily AI generation limit reached (5 images).',
   },
   premium: {
     windowMs: 24 * 60 * 60 * 1000,
-    max: 500,
-    message: 'Premium tier: daily AI generation limit reached (500 images).',
+    max: 20,
+    message: 'Premium tier: daily AI generation limit reached (20 images).',
   },
 }
 

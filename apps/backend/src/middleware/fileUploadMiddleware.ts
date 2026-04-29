@@ -1,14 +1,22 @@
 import { Request, Response, NextFunction } from 'express'
 import multer from 'multer'
+import rateLimit from 'express-rate-limit'
 import { createLogger } from '@/utils/logger'
 import { fileUploadService } from '@/services/fileUploadService'
+import { AuthRequest } from '@/middleware/authMiddleware'
+import {
+  validateFileSecurity,
+  sanitizeFilename,
+  generateSecureFileKey,
+} from '@/utils/fileSecurity'
+import { malwareScanService } from '@/services/malwareScanService'
 
 const logger = createLogger('FileUploadMiddleware')
 
 // Configure multer for memory storage
 const storage = multer.memoryStorage()
 
-// File filter function
+// Enhanced file filter function with security validation
 const fileFilter = (req: Request, file: Express.Multer.File, cb: multer.FileFilterCallback) => {
   try {
     // Get allowed file types from environment
@@ -35,6 +43,9 @@ const fileFilter = (req: Request, file: Express.Multer.File, cb: multer.FileFilt
       return cb(error as any)
     }
 
+    // Sanitize filename
+    file.originalname = sanitizeFilename(file.originalname)
+
     cb(null, true)
   } catch (error) {
     logger.error('File filter error', { error, filename: file.originalname })
@@ -42,19 +53,38 @@ const fileFilter = (req: Request, file: Express.Multer.File, cb: multer.FileFilt
   }
 }
 
-// Create multer instance
+// Create multer instance with enhanced security limits
 export const upload = multer({
   storage,
   fileFilter,
   limits: {
     fileSize: parseInt(process.env.MAX_FILE_SIZE || '10485760'), // 10MB default
     files: 5, // Maximum 5 files per request
+    fields: 10, // Maximum 10 fields per request
+    fieldNameSize: 100, // Maximum field name size
+    fieldSize: 1024 * 1024, // Maximum field value size (1MB)
+  },
+})
+
+// Rate limiting for file uploads
+export const uploadRateLimit = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 20, // Limit each IP to 20 uploads per windowMs
+  message: {
+    success: false,
+    error: 'Too many upload attempts',
+    message: 'Please try again later',
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req: AuthRequest) => {
+    return req.ip + ':' + (req.user?.address || 'anonymous')
   },
 })
 
 // Middleware for single file upload
 export const uploadSingle = (fieldName: string) => {
-  return (req: Request, res: Response, next: NextFunction) => {
+  return (req: AuthRequest, res: Response, next: NextFunction) => {
     const singleUpload = upload.single(fieldName)
     
     singleUpload(req, res, (error) => {
@@ -97,14 +127,14 @@ export const uploadSingle = (fieldName: string) => {
         })
       }
       
-      next()
+      return next()
     })
   }
 }
 
 // Middleware for multiple file upload
 export const uploadMultiple = (fieldName: string, maxCount: number = 5) => {
-  return (req: Request, res: Response, next: NextFunction) => {
+  return (req: AuthRequest, res: Response, next: NextFunction) => {
     const multipleUpload = upload.array(fieldName, maxCount)
     
     multipleUpload(req, res, (error) => {
@@ -147,57 +177,137 @@ export const uploadMultiple = (fieldName: string, maxCount: number = 5) => {
         })
       }
       
-      next()
+      return next()
     })
   }
 }
 
-// Middleware to validate uploaded files with the file upload service
-export const validateUploadedFiles = (req: Request, res: Response, next: NextFunction) => {
+// Enhanced middleware to validate uploaded files with comprehensive security checks
+export const validateUploadedFiles = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const files = req.files as Express.Multer.File[] || []
     const file = req.file as Express.Multer.File || null
 
     // Validate single file
     if (file) {
-      const validation = fileUploadService.validateFile(
+      const securityValidation = validateFileSecurity(
         file.buffer,
         file.originalname,
-        file.mimetype
+        file.mimetype,
+        file.size
       )
 
-      if (!validation.isValid) {
+      if (!securityValidation.isValid) {
+        logger.warn('File security validation failed', {
+          filename: file.originalname,
+          errors: securityValidation.errors,
+          warnings: securityValidation.warnings,
+        })
+
         return res.status(400).json({
           success: false,
-          error: 'File validation failed',
-          message: validation.error,
+          error: 'File security validation failed',
+          message: securityValidation.errors.join('; '),
+          warnings: securityValidation.warnings,
         })
+      }
+
+      // Log warnings if any
+      if (securityValidation.warnings.length > 0) {
+        logger.info('File security warnings', {
+          filename: file.originalname,
+          warnings: securityValidation.warnings,
+        })
+      }
+
+      // Perform malware scan
+      const malwareScan = await malwareScanService.scanFile(
+        file.buffer,
+        file.originalname,
+        file.mimetype,
+        req.user?.address
+      )
+
+      if (!malwareScan.isClean) {
+        logger.warn('Malware scan detected threats', {
+          filename: file.originalname,
+          threats: malwareScan.threats,
+          riskLevel: malwareScan.riskLevel,
+        })
+
+        return res.status(403).json({
+          success: false,
+          error: 'Malware detected',
+          message: `File contains malicious content: ${malwareScan.threats.join('; ')}`,
+          riskLevel: malwareScan.riskLevel,
+          threats: malwareScan.threats,
+        })
+      }
+
+      // Attach security metadata to request
+      req.fileSecurity = {
+        hash: securityValidation.metadata.hash,
+        actualSize: securityValidation.metadata.actualSize,
+        detectedType: securityValidation.metadata.detectedType,
+        malwareScan: {
+          isClean: malwareScan.isClean,
+          riskLevel: malwareScan.riskLevel,
+          scanTime: malwareScan.scanDetails.metadata.scanTime,
+        },
       }
     }
 
     // Validate multiple files
     if (files.length > 0) {
+      const filesSecurity: any[] = []
+
       for (const uploadedFile of files) {
-        const validation = fileUploadService.validateFile(
+        const securityValidation = validateFileSecurity(
           uploadedFile.buffer,
           uploadedFile.originalname,
-          uploadedFile.mimetype
+          uploadedFile.mimetype,
+          uploadedFile.size
         )
 
-        if (!validation.isValid) {
+        if (!securityValidation.isValid) {
+          logger.warn('File security validation failed', {
+            filename: uploadedFile.originalname,
+            errors: securityValidation.errors,
+            warnings: securityValidation.warnings,
+          })
+
           return res.status(400).json({
             success: false,
-            error: 'File validation failed',
-            message: `File "${uploadedFile.originalname}": ${validation.error}`,
+            error: 'File security validation failed',
+            message: `File "${uploadedFile.originalname}": ${securityValidation.errors.join('; ')}`,
+            warnings: securityValidation.warnings,
           })
         }
+
+        // Log warnings if any
+        if (securityValidation.warnings.length > 0) {
+          logger.info('File security warnings', {
+            filename: uploadedFile.originalname,
+            warnings: securityValidation.warnings,
+          })
+        }
+
+        filesSecurity.push({
+          originalname: uploadedFile.originalname,
+          hash: securityValidation.metadata.hash,
+          actualSize: securityValidation.metadata.actualSize,
+          detectedType: securityValidation.metadata.detectedType,
+        })
       }
+
+      // Attach security metadata to request
+      req.filesSecurity = filesSecurity
     }
 
-    next()
+    return next()
   } catch (error) {
     logger.error('File validation middleware error', { error })
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       error: 'File validation error',
       message: 'An error occurred during file validation',
@@ -207,7 +317,7 @@ export const validateUploadedFiles = (req: Request, res: Response, next: NextFun
 
 // Middleware to add upload options to request
 export const setUploadOptions = (defaultOptions: any = {}) => {
-  return (req: Request, res: Response, next: NextFunction) => {
+  return (req: AuthRequest, res: Response, next: NextFunction) => {
     // Extract upload options from query parameters or body
     const uploadOptions = {
       folder: req.query.folder as string || req.body.folder || defaultOptions.folder || 'uploads',
@@ -226,11 +336,11 @@ export const setUploadOptions = (defaultOptions: any = {}) => {
     // Attach upload options to request
     req.uploadOptions = uploadOptions
     
-    next()
+    return next()
   }
 }
 
-// Extend Request interface to include upload options
+// Extend Request interface to include upload options and security metadata
 declare global {
   namespace Express {
     interface Request {
@@ -242,12 +352,28 @@ declare global {
         format?: string
         metadata?: Record<string, string>
       }
+      fileSecurity?: {
+        hash: string
+        actualSize: number
+        detectedType?: string
+        malwareScan?: {
+          isClean: boolean
+          riskLevel: 'low' | 'medium' | 'high' | 'critical'
+          scanTime: number
+        }
+      }
+      filesSecurity?: Array<{
+        originalname: string
+        hash: string
+        actualSize: number
+        detectedType?: string
+      }>
     }
   }
 }
 
 // Error handling middleware for file uploads
-export const handleUploadError = (error: Error, req: Request, res: Response, next: NextFunction) => {
+export const handleUploadError = (error: Error, req: AuthRequest, res: Response, next: NextFunction) => {
   logger.error('Upload error handler', { error, url: req.url, method: req.method })
   
   if (error instanceof multer.MulterError) {
@@ -259,7 +385,7 @@ export const handleUploadError = (error: Error, req: Request, res: Response, nex
     })
   }
   
-  res.status(500).json({
+  return res.status(500).json({
     success: false,
     error: 'Upload failed',
     message: 'An unexpected error occurred during file upload',
@@ -273,4 +399,5 @@ export default {
   validateUploadedFiles,
   setUploadOptions,
   handleUploadError,
+  uploadRateLimit,
 }

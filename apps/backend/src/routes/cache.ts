@@ -2,12 +2,14 @@ import { Router, Request, Response } from 'express'
 import cacheService from '@/services/cacheService'
 import { invalidateArtworkCache, invalidateUserCache } from '@/middleware/cacheMiddleware'
 import { createLogger } from '@/utils/logger'
+import { validate } from '@/middleware/validate'
+import { clearCacheSchema, getCacheStatsSchema } from '@/schemas'
 
 const logger = createLogger('CacheRoutes')
 const router = Router()
 
 // Get cache statistics
-router.get('/stats', async (req: Request, res: Response) => {
+router.get('/stats', validate(getCacheStatsSchema), async (req: Request, res: Response) => {
   try {
     const stats = cacheService.getCacheStats()
     res.json({
@@ -27,7 +29,7 @@ router.get('/stats', async (req: Request, res: Response) => {
 })
 
 // Clear all caches
-router.delete('/clear', async (req: Request, res: Response) => {
+router.delete('/clear', validate(clearCacheSchema), async (req: Request, res: Response) => {
   try {
     await cacheService.flush()
     logger.info('All caches cleared via API')

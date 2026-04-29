@@ -30,15 +30,19 @@ import jobRoutes from '@/routes/jobs'
 import notificationRoutes from '@/routes/notifications'
 import transactionRoutes from '@/routes/transactions'
 import analyticsRoutes from '@/routes/analytics'
+import bidRoutes from '@/routes/bidRoutes'
 import fileUploadRoutes from '@/routes/fileUpload'
 import databaseMetricsRoutes from '@/routes/databaseMetrics'
+import rateLimitRoutes from '@/routes/rateLimit'
 import healthService from '@/services/healthService'
 import cacheService from '@/services/cacheService'
 import { jobQueueService } from '@/services/jobQueueService'
 import { createLogger } from '@/utils/logger'
 import { websocketService } from '@/services/websocketService'
+import { emailService } from '@/services/emailService'
 import { ensureIndexes } from '@/scripts/ensureIndexes'
 import { runMigrations } from '@/services/migrationService'
+import { redis } from '@/config/redis'
 import adminRoutes from '@/routes/admin'
 import cdnRoutes from '@/routes/cdn'
 import logsRoute from "./routes/logs";
@@ -170,6 +174,8 @@ export function createApp() {
   app.use('/api/cache', cacheManagementRoutes)
   app.use('/api/database', databaseMetricsRoutes)
   app.use('/api/admin', adminRoutes)
+  app.use('/api/bids', bidRoutes)
+  app.use('/api/rate-limit', rateLimitRoutes)
 
   // ── 404 & Global Error Handlers ──────────────────────────────────────────────
   app.use(notFound)
@@ -214,12 +220,27 @@ export async function startServer() {
   await ensureIndexes()
   logger.info('🔍 Database indexes verified and created')
 
+  // Initialize Redis for distributed rate limiting
+  try {
+    await redis.connect()
+    logger.info('🔴 Redis connected for distributed rate limiting')
+  } catch (error) {
+    logger.warn('Redis connection failed, rate limiting will use memory fallback:', error)
+  }
+
   if (process.env.NODE_ENV !== 'test') {
     try {
       await jobQueueService.initialize()
       logger.info('Job queue service initialized')
     } catch (error) {
       logger.warn('Job queue service initialization failed:', error)
+    }
+
+    try {
+      await emailService.initialize()
+      logger.info('Email service initialized')
+    } catch (error) {
+      logger.warn('Email service initialization failed:', error)
     }
   }
 
@@ -276,6 +297,12 @@ async function shutdown(signal: string) {
   }
 
   try {
+    await redis.disconnect()
+  } catch (error) {
+    logger.warn('Redis disconnect encountered an error:', error)
+  }
+
+  try {
     await database.disconnect()
   } catch (error) {
     logger.warn('Database disconnect encountered an error:', error)
@@ -291,5 +318,7 @@ process.on('SIGINT', async () => {
   await shutdown('SIGINT')
   process.exit(0)
 })
+
+}
 
 export default app
