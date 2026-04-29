@@ -9,6 +9,8 @@ export interface IRefreshToken {
 
 export interface IUser extends Document {
   address: string
+  /** @deprecated Use `address` instead. Kept for backward compatibility. */
+  publicKey?: string
   username: string
   email?: string
   bio?: string
@@ -24,6 +26,8 @@ export interface IUser extends Document {
   refreshTokens: IRefreshToken[]
   stats?: {
     artworks?: number
+    /** Number of artworks created by this user (alias for `artworks`). */
+    artworksCreated?: number
     sales?: number
     created?: number
     collected?: number
@@ -54,8 +58,10 @@ export interface IUser extends Document {
 const UserSchema: Schema = new Schema(
   {
     address: { type: String, required: true, unique: true, index: true, trim: true },
-    username: { type: String, required: true, trim: true, index: true },
-    email: { type: String, sparse: true, trim: true, lowercase: true },
+    // publicKey is an alias for address kept for backward compatibility
+    publicKey: { type: String, trim: true, sparse: true },
+    username: { type: String, required: true, unique: true, sparse: true, trim: true },
+    email: { type: String, unique: true, sparse: true, trim: true, lowercase: true },
     bio: { type: String, trim: true, maxlength: 500 },
     profileImage: { type: String },
     avatar: { type: String },
@@ -83,6 +89,7 @@ const UserSchema: Schema = new Schema(
     },
     stats: {
       artworks: { type: Number, default: 0 },
+      artworksCreated: { type: Number, default: 0 },
       sales: { type: Number, default: 0 },
       created: { type: Number, default: 0 },
       collected: { type: Number, default: 0 },
@@ -119,9 +126,14 @@ const UserSchema: Schema = new Schema(
 )
 
 // Indexes for performance
-UserSchema.index({ username: 1 })
-UserSchema.index({ address: 1 })
+UserSchema.index({ address: 1 }, { unique: true })
+UserSchema.index({ publicKey: 1 }, { unique: true, sparse: true })
+UserSchema.index({ username: 1 }, { unique: true, sparse: true })
+UserSchema.index({ email: 1 }, { unique: true, sparse: true })
+UserSchema.index({ isVerified: 1, createdAt: -1 })
+UserSchema.index({ 'stats.artworksCreated': -1 })
 UserSchema.index({ 'stats.followers': -1 })
+UserSchema.index({ createdAt: -1 })
 UserSchema.index({ username: 'text', bio: 'text' })
 
 // Virtual relationships - enable reverse lookups
