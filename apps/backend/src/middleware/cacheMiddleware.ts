@@ -5,7 +5,7 @@ import etag from 'etag'
 
 const logger = createLogger('CacheMiddleware')
 
-export interface CacheOptions {
+export interface RouteSpecificCacheOptions {
   ttl?: number // Time to live in seconds
   key?: string | ((req: Request) => string)
   condition?: (req: Request, res: Response) => boolean
@@ -13,13 +13,13 @@ export interface CacheOptions {
   useETag?: boolean
 }
 
-const defaultOptions: CacheOptions = {
+const defaultOptions: RouteSpecificCacheOptions = {
   ttl: 300, // 5 minutes
   useETag: true,
   skipCache: false
 }
 
-export const cacheMiddleware = (options: CacheOptions = {}) => {
+const buildCacheMiddleware = (options: RouteSpecificCacheOptions = {}) => {
   const opts = { ...defaultOptions, ...options }
 
   return async (req: Request, res: Response, next: NextFunction) => {
@@ -123,30 +123,30 @@ function generateCacheKey(req: Request): string {
 }
 
 // Specialized cache middleware for different use cases
-export const artworkListCache = cacheMiddleware({
+export const artworkListCache = buildCacheMiddleware({
   ttl: 600, // 10 minutes for artwork listings
   key: (req) => `artworks:list:${JSON.stringify(req.query)}`
 })
 
-export const artworkDetailCache = cacheMiddleware({
+export const artworkDetailCache = buildCacheMiddleware({
   ttl: 1800, // 30 minutes for individual artwork details
   key: (req) => `artwork:detail:${req.params.id}`,
   useETag: true
 })
 
-export const userProfileCache = cacheMiddleware({
+export const userProfileCache = buildCacheMiddleware({
   ttl: 900, // 15 minutes for user profiles
   key: (req) => `user:profile:${req.user?.address || 'anonymous'}`,
   condition: (req) => !!req.user // Only cache authenticated users
 })
 
-export const metadataCache = cacheMiddleware({
+export const metadataCache = buildCacheMiddleware({
   ttl: 3600, // 1 hour for metadata (SEO data)
   key: (req) => `metadata:${req.params.id}`,
   useETag: true
 })
 
-export const aiStatusCache = cacheMiddleware({
+export const aiStatusCache = buildCacheMiddleware({
   ttl: 30, // 30 seconds for AI generation status
   key: (req) => `ai:status:${req.params.id}`,
   useETag: false
@@ -175,9 +175,28 @@ export const invalidateArtworkCache = async (artworkId?: string) => {
   }
 }
 
+export const userStatsCache = buildCacheMiddleware({
+  ttl: 300, // 5 minutes for user stats (aggregations are expensive)
+  key: (req) => `user:stats:${req.params.address}`,
+})
+
+export const userActivityCache = buildCacheMiddleware({
+  ttl: 120, // 2 minutes for activity feed
+  key: (req) => `user:activity:${req.params.address}:${JSON.stringify(req.query)}`,
+})
+
+export const leaderboardCache = buildCacheMiddleware({
+  ttl: 300, // 5 minutes for leaderboard
+  key: (req) => `user:leaderboard:${req.query.type || 'followers'}:${req.query.limit || '10'}`,
+})
+
 export const invalidateUserCache = async (userAddress: string) => {
   try {
-    await cacheService.del(`user:profile:${userAddress}`)
+    await Promise.all([
+      cacheService.del(`user:profile:${userAddress}`),
+      cacheService.del(`user:stats:${userAddress}`),
+      cacheService.delPattern(`user:activity:${userAddress}:*`),
+    ])
     logger.info(`Invalidated cache for user ${userAddress}`)
   } catch (error) {
     logger.error('Error invalidating user cache:', error)

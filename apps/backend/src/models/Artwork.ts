@@ -1,181 +1,194 @@
-import mongoose, { Schema, Document } from 'mongoose'
-import { UserDocument } from './User'
+import mongoose, { Document, Schema } from 'mongoose'
 
-export interface ArtworkDocument extends Document {
+export interface IArtwork extends Document {
   title: string
   description: string
   imageUrl: string
   price: string
-  currency: string
-  creator: mongoose.Types.ObjectId | UserDocument
-  owner?: mongoose.Types.ObjectId | UserDocument
+  currency: 'XLM' | 'USD' | 'EUR'
+  creator: string
+  owner: string
   category: string
   prompt?: string
   aiModel?: string
   tokenId?: string
   isListed: boolean
-  attributes?: ArtworkAttribute[]
-  metadata?: ArtworkMetadata
-  blockchainData?: BlockchainData
+  metadata?: {
+    attributes?: Array<{
+      trait_type: string
+      value: string | number
+      display_type?: 'number' | 'date' | 'string'
+    }>
+    category?: string
+    aiModel?: string
+    prompt?: string
+    externalUrl?: string
+    backgroundColor?: string
+  }
+  image?: string
+  // File upload related fields
+  fileUpload?: {
+    key: string
+    bucket: string
+    contentType: string
+    size: number
+    etag?: string
+    originalName: string
+    uploadDate: Date
+  }
+  // Multiple image formats support
+  images?: {
+    original?: string
+    thumbnail?: string
+    medium?: string
+    large?: string
+    webp?: string
+    avif?: string
+  }
+  blockchainData?: {
+    network?: string
+    contractId?: string
+    transactionHash?: string
+  }
   createdAt: Date
   updatedAt: Date
 }
 
-export interface ArtworkAttribute {
-  trait_type: string
-  value: string | number
-  display_type?: 'number' | 'date' | 'string'
-  trait_value?: string | number
-}
-
-export interface ArtworkMetadata {
-  attributes?: ArtworkAttribute[]
-  externalUrl?: string
-  backgroundColor?: string
-  animationUrl?: string
-  youtubeUrl?: string
-  image?: string
-  name?: string
-  description?: string
-}
-
-export interface BlockchainData {
-  tokenId?: string
-  contractAddress?: string
-  transactionHash?: string
-  blockNumber?: number
-  owner?: string
-  mintedAt?: Date
-  network: 'testnet' | 'mainnet'
-}
-
-const ArtworkAttributeSchema = new Schema<ArtworkAttribute>({
-  trait_type: { type: String, required: true },
-  value: { type: Schema.Types.Mixed, required: true },
-  display_type: { type: String, enum: ['number', 'date', 'string'] },
-  trait_value: { type: Schema.Types.Mixed }
-}, { _id: false })
-
-const ArtworkMetadataSchema = new Schema<ArtworkMetadata>({
-  attributes: [ArtworkAttributeSchema],
-  externalUrl: String,
-  backgroundColor: String,
-  animationUrl: String,
-  youtubeUrl: String,
-  image: String,
-  name: String,
-  description: String
-}, { _id: false })
-
-const BlockchainDataSchema = new Schema<BlockchainData>({
-  tokenId: String,
-  contractAddress: String,
-  transactionHash: String,
-  blockNumber: Number,
-  owner: String,
-  mintedAt: Date,
-  network: { type: String, enum: ['testnet', 'mainnet'], default: 'testnet' }
-}, { _id: false })
-
-const ArtworkSchema = new Schema<ArtworkDocument>({
-  title: {
-    type: String,
-    required: true,
-    trim: true,
-    maxlength: 200
+const ArtworkSchema: Schema = new Schema(
+  {
+    title: { type: String, required: true, trim: true },
+    description: { type: String, required: true, trim: true },
+    imageUrl: { type: String, required: true },
+    price: { type: String, required: true },
+    currency: { type: String, enum: ['XLM', 'USD', 'EUR'], default: 'XLM' },
+    creator: { type: String, required: true, index: true },
+    owner: { type: String, required: true, index: true },
+    category: { type: String, required: true, lowercase: true, index: true },
+    prompt: { type: String },
+    aiModel: { type: String },
+    tokenId: { type: String, sparse: true },
+    isListed: { type: Boolean, default: false, index: true },
+    metadata: {
+      attributes: [{
+        trait_type: String,
+        value: Schema.Types.Mixed,
+        display_type: { type: String, enum: ['number', 'date', 'string'] },
+      }],
+      category: { type: String },
+      aiModel: { type: String },
+      prompt: { type: String },
+      externalUrl: { type: String },
+      backgroundColor: { type: String },
+    },
+    image: { type: String },
+    // File upload metadata
+    fileUpload: {
+      key: { type: String },
+      bucket: { type: String },
+      contentType: { type: String },
+      size: { type: Number },
+      etag: { type: String },
+      originalName: { type: String },
+      uploadDate: { type: Date, default: Date.now },
+    },
+    // Multiple image formats
+    images: {
+      original: { type: String },
+      thumbnail: { type: String },
+      medium: { type: String },
+      large: { type: String },
+      webp: { type: String },
+      avif: { type: String },
+    },
+    blockchainData: {
+      network: { type: String },
+      contractId: { type: String },
+      transactionHash: { type: String },
+    },
   },
-  description: {
-    type: String,
-    required: true,
-    trim: true,
-    maxlength: 2000
-  },
-  imageUrl: {
-    type: String,
-    required: true,
-    trim: true
-  },
-  price: {
-    type: String,
-    required: true,
-    trim: true
-  },
-  currency: {
-    type: String,
-    required: true,
-    enum: ['ETH', 'USDC', 'DAI', 'XLM'],
-    default: 'ETH'
-  },
-  creator: {
-    type: Schema.Types.ObjectId,
-    ref: 'User',
-    required: true
-  },
-  owner: {
-    type: Schema.Types.ObjectId,
-    ref: 'User'
-  },
-  category: {
-    type: String,
-    required: true,
-    enum: ['abstract', 'portrait', 'landscape', 'digital-art', 'ai-generated', 'photography', '3d-art', 'animation'],
-    index: true
-  },
-  prompt: {
-    type: String,
-    trim: true,
-    maxlength: 1000
-  },
-  aiModel: {
-    type: String,
-    trim: true,
-    maxlength: 100
-  },
-  tokenId: {
-    type: String,
-    sparse: true,
-    index: true
-  },
-  isListed: {
-    type: Boolean,
-    default: true,
-    index: true
-  },
-  attributes: [ArtworkAttributeSchema],
-  metadata: ArtworkMetadataSchema,
-  blockchainData: BlockchainDataSchema
-}, {
-  timestamps: true,
-  toJSON: {
-    virtuals: true,
-    transform: function(doc, ret) {
-      ret.id = ret._id
-      delete ret._id
-      delete ret.__v
-      return ret
-    }
+  {
+    timestamps: true,
+    toJSON: { virtuals: true },
+    toObject: { virtuals: true },
   }
+)
+
+// Virtual for artist name lookup
+ArtworkSchema.virtual('artistInfo', {
+  ref: 'User',
+  localField: 'creator',
+  foreignField: 'address',
+  justOne: true
 })
 
-// Indexes for performance optimization
-ArtworkSchema.index({ creator: 1, createdAt: -1 })
-ArtworkSchema.index({ owner: 1, createdAt: -1 })
+ArtworkSchema.index({ title: 'text', description: 'text', prompt: 'text', category: 'text' })
+ArtworkSchema.index({ creator: 1, isListed: 1 })
 ArtworkSchema.index({ category: 1, isListed: 1, createdAt: -1 })
+ArtworkSchema.index({ creator: 1, createdAt: -1 })
 ArtworkSchema.index({ price: 1 })
-ArtworkSchema.index({ title: 'text', description: 'text' })
 ArtworkSchema.index({ createdAt: -1 })
+ArtworkSchema.index({ price: 1, createdAt: -1 })
+ArtworkSchema.index({ category: 1, price: 1 })
+ArtworkSchema.index({ creator: 1, category: 1, createdAt: -1 })
 
-// Virtual for checking if artwork is owned by creator
-ArtworkSchema.virtual('isOwnedByCreator').get(function() {
-  return this.owner ? this.owner.toString() === this.creator.toString() : true
+// Virtual relationships
+ArtworkSchema.virtual('transactions', {
+  ref: 'Transaction',
+  localField: '_id',
+  foreignField: 'artwork',
+  justOne: false
 })
 
-// Pre-save middleware to ensure data integrity
-ArtworkSchema.pre('save', function(next) {
-  if (this.isNew && !this.owner) {
-    this.owner = this.creator
-  }
-  next()
+ArtworkSchema.virtual('bids', {
+  ref: 'Bid',
+  localField: '_id',
+  foreignField: 'artwork',
+  justOne: false
 })
 
-export const Artwork = mongoose.model<ArtworkDocument>('Artwork', ArtworkSchema)
+ArtworkSchema.virtual('auction', {
+  ref: 'Auction',
+  localField: '_id',
+  foreignField: 'artwork',
+  justOne: true
+})
+
+ArtworkSchema.virtual('comments', {
+  ref: 'Comment',
+  localField: '_id',
+  foreignField: 'artwork',
+  justOne: false
+})
+
+ArtworkSchema.virtual('likes', {
+  ref: 'Like',
+  localField: '_id',
+  foreignField: 'artwork',
+  justOne: false
+})
+
+ArtworkSchema.virtual('favorites', {
+  ref: 'Favorite',
+  localField: '_id',
+  foreignField: 'artwork',
+  justOne: false
+})
+
+// Cascade delete related entities when artwork is deleted
+ArtworkSchema.pre('deleteOne', { document: true, query: false }, async function() {
+  const artworkId = this._id
+  
+  await mongoose.model('Transaction').deleteMany({ artwork: artworkId })
+  await mongoose.model('Bid').deleteMany({ artwork: artworkId })
+  await mongoose.model('Auction').deleteOne({ artwork: artworkId })
+  await mongoose.model('Comment').deleteMany({ artwork: artworkId })
+  await mongoose.model('Like').deleteMany({ artwork: artworkId })
+  await mongoose.model('Favorite').deleteMany({ artwork: artworkId })
+  await mongoose.model('Collection').updateMany(
+    { artworks: artworkId },
+    { $pull: { artworks: artworkId } }
+  )
+})
+
+export const Artwork = mongoose.model<IArtwork>('Artwork', ArtworkSchema)
+export default Artwork

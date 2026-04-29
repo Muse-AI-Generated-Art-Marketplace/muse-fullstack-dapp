@@ -1,7 +1,7 @@
 import express from 'express'
 import sharp from 'sharp'
 import axios from 'axios'
-import crypto from 'crypto'
+import * as crypto from 'crypto'
 
 const router = express.Router()
 
@@ -10,7 +10,7 @@ interface ImageOptimizationQuery {
   w?: string
   h?: string
   q?: string
-  fm?: 'webp' | 'avif' | 'jpeg' | 'png'
+  fm?: 'webp' | 'avif' | 'jpeg' | 'png' | 'jpg'
   crop?: string
   fit?: 'cover' | 'contain' | 'fill'
 }
@@ -22,7 +22,23 @@ const imageCache = new Map<string, Buffer>()
 function isValidUrl(url: string): boolean {
   try {
     const parsedUrl = new URL(url)
-    return ['http:', 'https:'].includes(parsedUrl.protocol)
+    
+    if (!['http:', 'https:'].includes(parsedUrl.protocol)) {
+      return false
+    }
+
+    const hostname = parsedUrl.hostname.toLowerCase()
+    const internalHostnames = ['localhost', '127.0.0.1', '::1', '0.0.0.0']
+    
+    if (internalHostnames.includes(hostname)) {
+      return false
+    }
+
+    if (/^(10\.|172\.(1[6-9]|2[0-9]|3[0-1])\.|192\.168\.)/.test(hostname)) {
+      return false
+    }
+
+    return true
   } catch {
     return false
   }
@@ -48,7 +64,7 @@ async function transformImage(
     
     transformer = transformer.resize(width, height, {
       fit: query.fit || 'cover',
-      crop: query.crop === 'true'
+      position: query.crop === 'true' ? 'entropy' : query.crop
     })
   }
 
@@ -64,6 +80,7 @@ async function transformImage(
       transformer = transformer.avif({ quality })
       break
     case 'jpeg':
+    case 'jpg':
       transformer = transformer.jpeg({ quality })
       break
     case 'png':
@@ -79,7 +96,7 @@ async function transformImage(
 // Main optimization endpoint
 router.get('/image-optimizer', async (req, res) => {
   try {
-    const query = req.query as ImageOptimizationQuery
+    const query = req.query as unknown as ImageOptimizationQuery
 
     // Validate required parameters
     if (!query.url || !isValidUrl(query.url)) {
@@ -121,7 +138,9 @@ router.get('/image-optimizer', async (req, res) => {
     if (imageCache.size > 100) {
       // Remove oldest entries (simple LRU)
       const firstKey = imageCache.keys().next().value
-      imageCache.delete(firstKey)
+      if (firstKey) {
+        imageCache.delete(firstKey)
+      }
     }
     imageCache.set(cacheKey, optimizedBuffer)
 
@@ -140,7 +159,7 @@ router.get('/image-optimizer', async (req, res) => {
       ).toFixed(2) + '%'
     })
 
-    res.send(optimizedBuffer)
+    return res.send(optimizedBuffer)
 
   } catch (error) {
     console.error('Image optimization error:', error)
@@ -154,7 +173,7 @@ router.get('/image-optimizer', async (req, res) => {
       }
     }
     
-    res.status(500).json({ error: 'Failed to optimize image' })
+    return res.status(500).json({ error: 'Failed to optimize image' })
   }
 })
 

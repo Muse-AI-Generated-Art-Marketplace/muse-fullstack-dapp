@@ -1,184 +1,173 @@
 import React from 'react'
+import { Artwork, ArtworkCardProps } from '@/types'
 import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
-import { OptimizedImage } from '@/components/ui/OptimizedImage'
-
-import { Artwork, ArtworkCardProps } from '@/types'
+import { cn } from '@/utils/cn'
 
 export function ArtworkCard({
   artwork,
+  variant = 'default',
   onPurchase,
   onView,
+  onShare,
+  onFavorite,
   showPrice = true,
   showCreator = false,
-  variant = 'default',
-  className = ''
+  showActions = true,
+  className = '',
+  isLoading = false
 }: ArtworkCardProps) {
-  const handleImageError = (e: React.SyntheticEvent<HTMLImageElement>) => {
-    const target = e.target as HTMLImageElement
-    target.style.display = 'none'
-    target.parentElement?.classList.add('bg-gradient-to-br', 'from-primary-100', 'to-primary-200')
+  const cardId = `artwork-card-${artwork.id}`
+  const titleId = `artwork-title-${artwork.id}`
+
+  const handlePurchase = (e: React.MouseEvent) => {
+    e.stopPropagation()
+    onPurchase?.(artwork)
   }
 
-  const renderContent = () => {
-    switch (variant) {
-      case 'compact':
-        return (
-          <div className="flex space-x-3">
-            <div className="w-16 h-16 bg-gradient-to-br from-primary-100 to-primary-200 rounded-lg flex-shrink-0">
-              <OptimizedImage
-                src={artwork.imageUrl}
-                alt={artwork.title}
-                className="w-full h-full object-cover rounded-lg"
-                width={64}
-                height={64}
-                placeholder="blur"
-              />
-            </div>
-            <div className="flex-1 min-w-0">
-              <h3 className="font-semibold text-secondary-900 text-sm truncate">
-                {artwork.title}
-              </h3>
-              {showCreator && artwork.creator && (
-                <p className="text-xs text-secondary-600">{artwork.creator}</p>
-              )}
-              {showPrice && (
-                <p className="text-sm font-medium text-secondary-900">
-                  {artwork.price} {artwork.currency}
-                </p>
-              )}
-            </div>
-          </div>
-        )
-      
-      case 'detailed':
-        return (
-          <div className="space-y-4">
-            <div className="aspect-square bg-gradient-to-br from-primary-100 to-primary-200 rounded-lg overflow-hidden">
-              <OptimizedImage
-                src={artwork.imageUrl}
-                alt={artwork.title}
-                className="w-full h-full object-cover"
-                width={400}
-                height={400}
-                placeholder="blur"
-              />
-            </div>
-            
-            <div className="space-y-3">
-              <div>
-                <h3 className="font-semibold text-secondary-900 text-lg">
-                  {artwork.title}
-                </h3>
-                {showCreator && artwork.creator && (
-                  <p className="text-sm text-secondary-600">by {artwork.creator}</p>
-                )}
-              </div>
-              
-              <p className="text-secondary-600 text-sm line-clamp-3">
-                {artwork.description}
-              </p>
-              
-              {showPrice && (
-                <div className="flex items-center justify-between pt-2">
-                  <span className="text-lg font-medium text-secondary-900">
-                    {artwork.price} {artwork.currency}
-                  </span>
-                  <div className="flex space-x-2">
-                    {onView && (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => onView(artwork)}
-                      >
-                        View
-                      </Button>
-                    )}
-                    {onPurchase && (
-                      <Button
-                        variant="primary"
-                        size="sm"
-                        onClick={() => onPurchase(artwork)}
-                      >
-                        Buy Now
-                      </Button>
-                    )}
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-        )
-      
-      default:
-        return (
-          <div className="space-y-4">
-            <div className="aspect-square bg-gradient-to-br from-primary-100 to-primary-200 rounded-lg overflow-hidden group-hover:scale-105 transition-transform">
-              <OptimizedImage
-                src={artwork.imageUrl}
-                alt={artwork.title}
-                className="w-full h-full object-cover"
-                width={300}
-                height={300}
-                placeholder="blur"
-              />
-            </div>
-            
-            <div className="space-y-2">
-              <h3 className="font-semibold text-secondary-900 text-mobile-base truncate">
-                {artwork.title}
-              </h3>
-              <p className="text-mobile-sm text-secondary-600 line-clamp-2">
-                {artwork.description}
-              </p>
-              
-              {showPrice && (
-                <div className="flex items-center justify-between">
-                  <span className="text-mobile-sm font-medium text-secondary-900">
-                    {artwork.price} {artwork.currency}
-                  </span>
-                  <div className="flex space-x-2">
-                    {onView && (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => onView(artwork)}
-                      >
-                        View
-                      </Button>
-                    )}
-                    {onPurchase && (
-                      <Button
-                        variant="primary"
-                        size="sm"
-                        onClick={() => onPurchase(artwork)}
-                      >
-                        Buy Now
-                      </Button>
-                    )}
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-        )
-    }
+  const handleView = () => {
+    onView?.(artwork)
   }
 
-  const cardVariants = {
-    compact: 'p-3',
-    detailed: 'p-6',
-    default: 'mobile'
+  if (variant === 'compact') {
+    return (
+      <article
+        id={cardId}
+        aria-labelledby={titleId}
+        className={cn(
+          'flex items-center space-x-4 p-3 rounded-lg border border-secondary-100 hover:border-primary-200 transition-colors bg-white',
+          className
+        )}
+      >
+        <div className="relative h-16 w-16 flex-shrink-0 overflow-hidden rounded-md">
+          <img
+            src={artwork.imageUrl}
+            alt={artwork.title}
+            className="h-full w-full object-cover"
+          />
+        </div>
+        <div className="flex-1 min-w-0">
+          <h4 id={titleId} className="text-sm font-semibold text-secondary-900 truncate">
+            {artwork.title}
+          </h4>
+          {showPrice && (
+            <p className="text-xs text-secondary-500">
+              {artwork.price} {artwork.currency}
+            </p>
+          )}
+        </div>
+        {showActions && (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={handleView}
+            aria-label={`View details for ${artwork.title}`}
+          >
+            View
+          </Button>
+        )}
+      </article>
+    )
   }
 
   return (
     <Card
-      variant={variant === 'default' ? 'mobile' : 'default'}
-      padding={variant === 'default' ? 'none' : 'md'}
-      hover={variant !== 'compact'}
-      className={className}
+      id={cardId}
+      aria-labelledby={titleId}
+      as="article"
+      className={cn('group overflow-hidden flex flex-col', className)}
+      onClick={handleView}
     >
-      {renderContent()}
+      {/* Image Container */}
+      <div className="relative aspect-square overflow-hidden bg-secondary-100">
+        <img
+          src={artwork.imageUrl}
+          alt={artwork.title}
+          className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+          loading="lazy"
+        />
+        
+        {/* Overlay Actions */}
+        <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center space-x-2">
+          {onFavorite && (
+            <Button
+              variant="secondary"
+              size="sm"
+              className="rounded-full w-10 h-10 p-0"
+              onClick={(e) => {
+                e.stopPropagation()
+                onFavorite(artwork)
+              }}
+              aria-label={`Add ${artwork.title} to favorites`}
+            >
+              ❤️
+            </Button>
+          )}
+          {onShare && (
+            <Button
+              variant="secondary"
+              size="sm"
+              className="rounded-full w-10 h-10 p-0"
+              onClick={(e) => {
+                e.stopPropagation()
+                onShare(artwork)
+              }}
+              aria-label={`Share ${artwork.title}`}
+            >
+              🔗
+            </Button>
+          )}
+        </div>
+      </div>
+
+      {/* Content */}
+      <div className="p-4 flex-1 flex flex-col">
+        <div className="flex justify-between items-start mb-1">
+          <h3 id={titleId} className="font-semibold text-secondary-900 truncate pr-2">
+            {artwork.title}
+          </h3>
+          {showPrice && (
+            <span className="text-primary-600 font-bold whitespace-nowrap">
+              {artwork.price} {artwork.currency}
+            </span>
+          )}
+        </div>
+
+        {showCreator && (
+          <p className="text-sm text-secondary-500 mb-3 truncate">
+            by <span className="text-secondary-700 font-medium">@{artwork.creator}</span>
+          </p>
+        )}
+
+        <p className="text-sm text-secondary-600 line-clamp-2 mb-4 flex-1">
+          {artwork.description}
+        </p>
+
+        {showActions && (
+          <div className="mt-auto flex space-x-2">
+            <Button
+              variant="outline"
+              size="sm"
+              fullWidth
+              onClick={handleView}
+              aria-label={`View details for ${artwork.title}`}
+            >
+              Details
+            </Button>
+            {onPurchase && (
+              <Button
+                variant="primary"
+                size="sm"
+                fullWidth
+                onClick={handlePurchase}
+                aria-label={`Purchase ${artwork.title} for ${artwork.price} ${artwork.currency}`}
+              >
+                Buy Now
+              </Button>
+            )}
+          </div>
+        )}
+      </div>
     </Card>
   )
 }

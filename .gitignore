@@ -49,6 +49,15 @@ coverage/
 # nyc test coverage
 .nyc_output
 
-# Temporary folders
-tmp/
-temp/
+# ESLint
+.eslintcache
+
+# CodeQL
+.codeql/
+.codeql-results/
+
+# Gitleaks
+gitleaks-report.json
+
+# Temporary test files
+test-results/

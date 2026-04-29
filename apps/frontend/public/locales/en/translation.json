@@ -1,0 +1,40 @@
+{
+  "nav": {
+    "explore": "Explore",
+    "activity": "Activity",
+    "mint": "Mint",
+    "profile": "Profile",
+    "connect": "Connect",
+    "connect_wallet": "Connect Wallet",
+    "close_menu": "Close main menu",
+    "open_menu": "Open main menu"
+  },
+  "artwork": {
+    "loading": "Loading artwork...",
+    "not_found": "Artwork Not Found",
+    "not_found_desc": "Sorry, we couldn't find the artwork you're looking for.",
+    "breadcrumb_home": "Home",
+    "breadcrumb_explore": "Explore",
+    "breadcrumb_artwork": "Artwork",
+    "details": "Artwork Details",
+    "share_title": "Share this artwork",
+    "share_action": "Share",
+    "tweet_action": "Tweet",
+    "link_copied": "Link copied to clipboard!"
+  },
+  "common": {
+    "muse": "Muse",
+    "search_placeholder": "Search...",
+    "verification_page": "Issue #26 Verification Page"
+  },
+  "empty_state": {
+    "clear_filters": "Clear Filters",
+    "clear_filters_aria": "Clear all active filters",
+    "no_results_title": "No artworks found",
+    "no_results_desc": "Try adjusting your filters or search terms to find what you're looking for.",
+    "no_favorites_title": "No favorites yet",
+    "no_favorites_desc": "Heart your favorite AI artworks to save them for later and support the artists.",
+    "no_artworks_title": "No artworks available",
+    "no_artworks_desc": "Be the first to mint and showcase your AI-generated artwork on the marketplace."
+  }
+}

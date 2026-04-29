@@ -191,7 +191,7 @@ export interface AppError {
   userMessage: string
   isRecoverable: boolean
   statusCode?: number
-  details?: Record<string, any>
+  details?: unknown
   originalError?: Error | unknown
   timestamp?: string
 }
@@ -342,6 +342,132 @@ export type Optional<T, K extends keyof T> = Omit<T, K> & Partial<Pick<T, K>>
 export type RequiredFields<T, K extends keyof T> = T & Required<Pick<T, K>>
 export type DeepPartial<T> = {
   [P in keyof T]?: T[P] extends object ? DeepPartial<T[P]> : T[P]
+}
+
+// User Settings Types
+export interface UserSettings {
+  profile: UserSettingsProfile
+  notifications: UserSettingsNotifications
+  privacy: UserSettingsPrivacy
+  preferences: UserSettingsPreferences
+  wallet: UserSettingsWallet
+}
+
+export interface UserSettingsProfile {
+  username: string
+  email?: string
+  bio?: string
+  website?: string
+  twitter?: string
+  discord?: string
+  avatar?: string
+  banner?: string
+}
+
+export interface UserSettingsNotifications {
+  email: {
+    newSales: boolean
+    newOffers: boolean
+    priceAlerts: boolean
+    newsletter: boolean
+    security: boolean
+  }
+  push: {
+    newSales: boolean
+    newOffers: boolean
+    priceAlerts: boolean
+    mentions: boolean
+    follows: boolean
+  }
+}
+
+export interface UserSettingsPrivacy {
+  profileVisibility: 'public' | 'private' | 'friends'
+  showEmail: boolean
+  showSocialLinks: boolean
+  allowDirectMessages: boolean
+  showOnlineStatus: boolean
+  showActivity: boolean
+}
+
+export interface UserSettingsPreferences {
+  language: string
+  currency: string
+  theme: 'light' | 'dark' | 'system'
+  timezone: string
+  autoPlayVideos: boolean
+  highQualityImages: boolean
+  matureContent: boolean
+}
+
+export interface UserSettingsWallet {
+  connectedWallets: ConnectedWallet[]
+  defaultWallet?: string
+  gasSettings: GasSettings
+  securitySettings: SecuritySettings
+}
+
+export interface ConnectedWallet {
+  address: string
+  name: string
+  network: 'testnet' | 'mainnet'
+  isDefault: boolean
+  connectedAt: string
+}
+
+export interface GasSettings {
+  speed: 'slow' | 'standard' | 'fast'
+  maxGasPrice?: string
+  autoAdjust: boolean
+}
+
+export interface SecuritySettings {
+  twoFactorEnabled: boolean
+  emailVerification: boolean
+  sessionTimeout: number
+  loginNotifications: boolean
+}
+
+// Collection Types
+export interface Collection {
+  id: string
+  name: string
+  description?: string
+  coverImage?: string
+  isPublic: boolean
+  owner: string
+  artworkIds: string[]
+  createdAt: string
+  updatedAt: string
+  artworkCount: number
+  stats?: CollectionStats
+}
+
+export interface CreateCollectionForm {
+  name: string
+  description?: string
+  isPublic: boolean
+  coverImage?: string
+}
+
+export interface UpdateCollectionForm extends Partial<CreateCollectionForm> {
+  id: string
+}
+
+export interface CollectionSearchParams {
+  query?: string
+  owner?: string
+  isPublic?: boolean
+  page?: number
+  limit?: number
+}
+
+export interface CollectionsResponse extends PaginatedResponse<Collection> {}
+
+export interface CollectionAction {
+  type: 'add' | 'remove'
+  artworkId: string
+  collectionId: string
 }
 
 // Theme Types

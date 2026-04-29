@@ -1,28 +1,81 @@
 import { useParams } from 'react-router-dom'
 import { useArtworkMetadata } from '@/hooks/useMetadata'
-import { MetaTags } from '@/components/MetaTags'
-import { PageLoading } from '@/components/ui/Loading'
+import { MetaTags, buildArtworkSchema } from '@/components/MetaTags'
+import { Breadcrumb } from '@/components/ui/Breadcrumb'
+import { ErrorDisplay } from '@/components/ErrorDisplay'
+import { useErrorContext } from '@/contexts/ErrorContext'
+import { ErrorHandler } from '@/utils/errorHandler'
+
+interface ArtworkMetadataPayload {
+  title: string
+  description: string
+  image: string
+  url: string
+  additionalTags?: Record<string, string>
+}
+
+interface ArtworkMetadataResponse {
+  success: boolean
+  data: ArtworkMetadataPayload
+}
 
 export function ArtworkPage() {
+  const { showError } = useErrorContext()
   const { id } = useParams<{ id: string }>()
-  const { data: metadata, isLoading, error } = useArtworkMetadata(id || '')
+  const { data: metadata, isLoading, error, refetch } = useArtworkMetadata(id || '')
+  const metadataResponse = metadata as ArtworkMetadataResponse | undefined
+
+  const appError = error ? ErrorHandler.handle(error) : null
 
   if (isLoading) {
     return <PageLoading message="Loading artwork details..." />
   }
 
-  if (error || !metadata?.success) {
+  if (appError || !metadataResponse?.success) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="text-center">
-          <h1 className="text-2xl font-bold text-secondary-900 mb-2">Artwork Not Found</h1>
-          <p className="text-secondary-600">Sorry, we couldn't find the artwork you're looking for.</p>
+        <div className="max-w-md w-full px-4">
+          <ErrorDisplay
+            error={
+              appError ||
+              ErrorHandler.createError(
+                'NOT_FOUND',
+                'Artwork not found or unavailable.',
+                404
+              )
+            }
+            onRetry={async () => {
+              await refetch()
+            }}
+            showRetry
+            showDismiss={false}
+            className="mb-4"
+          />
+          <div className="flex gap-2 justify-center">
+            <button
+              onClick={async () => {
+                await refetch()
+              }}
+              className="btn-primary text-mobile-sm px-4 py-2"
+            >
+              Try Again
+            </button>
+            <button
+              onClick={() => {
+                showError('Artwork could not be loaded. Redirecting to explore can help you find available items.')
+                window.location.href = '/explore'
+              }}
+              className="btn-outline text-mobile-sm px-4 py-2"
+            >
+              Go to Explore
+            </button>
+          </div>
         </div>
       </div>
     )
   }
 
-  const artworkData = metadata.data
+  const artworkData = metadataResponse.data
 
   return (
     <>
@@ -30,17 +83,28 @@ export function ArtworkPage() {
         title={artworkData.title}
         description={artworkData.description}
         image={artworkData.image}
-        url={artworkData.url}
-        type={artworkData.type}
-        siteName={artworkData.siteName}
-        twitterCard={artworkData.twitterCard}
-        twitterSite={artworkData.twitterSite}
-        additionalTags={artworkData.additionalTags}
+        canonicalUrl={`https://muse.art/artwork/${id}`}
+        type="article"
+        twitterCard="summary_large_image"
+        structuredData={buildArtworkSchema({
+          id: id || '',
+          title: artworkData.title,
+          description: artworkData.description,
+          image: artworkData.image,
+          creator: artworkData.additionalTags?.creator,
+          price: artworkData.additionalTags?.price,
+          currency: artworkData.additionalTags?.currency || 'XLM',
+        })}
       />
-      
+
       <div className="min-h-screen bg-background">
         <div className="mobile-section">
           <div className="max-w-6xl mx-auto">
+            <Breadcrumb items={[
+              { label: 'Home', href: '/' },
+              { label: 'Explore', href: '/explore' },
+              { label: artworkData.title || 'Artwork' },
+            ]} />
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
               {/* Artwork Image */}
               <div className="aspect-square bg-gradient-to-br from-primary-100 to-primary-200 rounded-lg overflow-hidden">
@@ -59,7 +123,7 @@ export function ArtworkPage() {
                 <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-primary-100 to-primary-200" style={{ display: 'none' }}>
                   <div className="text-center">
                     <div className="text-4xl mb-2">🎨</div>
-                    <p className="text-secondary-600">Artwork Image</p>
+                    <p className="text-secondary-600">Artwork</p>
                   </div>
                 </div>
               </div>
@@ -73,9 +137,9 @@ export function ArtworkPage() {
 
                 <div className="space-y-4">
                   <div className="bg-secondary-50 p-4 rounded-lg">
-                    <h3 className="font-semibold text-secondary-900 mb-2">Artwork Details</h3>
+                    <h3 className="font-semibold text-secondary-900 mb-2">Details</h3>
                     <dl className="space-y-2">
-                      {Object.entries(artworkData.additionalTags).map(([key, value]) => (
+                      {Object.entries((artworkData.additionalTags as Record<string, string>) || {}).map(([key, value]) => (
                         <div key={key} className="flex justify-between">
                           <dt className="text-sm font-medium text-secondary-700 capitalize">
                             {key.replace('_', ' ')}:
@@ -100,7 +164,7 @@ export function ArtworkPage() {
                           } else {
                             // Fallback: copy to clipboard
                             navigator.clipboard.writeText(artworkData.url)
-                            alert('Link copied to clipboard!')
+                            alert('Link copied!')
                           }
                         }}
                         className="btn-primary text-mobile-sm px-4 py-2 touch-manipulation"
@@ -124,3 +188,4 @@ export function ArtworkPage() {
     </>
   )
 }
+

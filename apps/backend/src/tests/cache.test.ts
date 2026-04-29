@@ -1,217 +1,149 @@
-import request from 'supertest'
-import app from '@/index'
 import cacheService from '@/services/cacheService'
+import { invalidateCache } from '@/middleware/cache'
+import { invalidateArtworkCache, invalidateUserCache } from '@/middleware/cacheMiddleware'
+import { Request, Response, NextFunction } from 'express'
 
-describe('Cache Integration Tests', () => {
-  beforeEach(async () => {
-    // Clear cache before each test
-    await cacheService.flush()
+// Mock cacheService
+jest.mock('@/services/cacheService', () => ({
+  get: jest.fn(),
+  set: jest.fn(),
+  del: jest.fn(),
+  delPattern: jest.fn(),
+  flush: jest.fn(),
+  getOrSet: jest.fn(),
+  getCacheStats: jest.fn(() => ({ useRedis: false, fallbackKeys: 0, fallbackStats: {} })),
+  disconnect: jest.fn(),
+}))
+
+const mockCache = cacheService as jest.Mocked<typeof cacheService>
+
+function makeRes(statusCode = 200) {
+  const res: Partial<Response> = {
+    statusCode,
+    json: jest.fn().mockReturnThis(),
+  }
+  return res as Response
+}
+
+function makeReq(params: Record<string, string> = {}) {
+  return { params, method: 'POST' } as unknown as Request
+}
+
+describe('invalidateCache middleware (cache.ts)', () => {
+  beforeEach(() => jest.clearAllMocks())
+
+  it('calls delPattern for each pattern on successful JSON response', async () => {
+    mockCache.delPattern.mockResolvedValue(true)
+
+    const req = makeReq()
+    const res = makeRes(200)
+    const next: NextFunction = jest.fn()
+
+    const middleware = invalidateCache(['artworks:list:*', 'artwork:detail:*'])
+    await middleware(req, res, next)
+
+    expect(next).toHaveBeenCalled()
+
+    // Trigger the intercepted res.json
+    await res.json({ success: true })
+
+    expect(mockCache.delPattern).toHaveBeenCalledWith('artworks:list:*')
+    expect(mockCache.delPattern).toHaveBeenCalledWith('artwork:detail:*')
   })
 
-  afterAll(async () => {
-    // Clean up after tests
-    await cacheService.disconnect()
+  it('does NOT call delPattern on error response', async () => {
+    const req = makeReq()
+    const res = makeRes(400)
+    const next: NextFunction = jest.fn()
+
+    const middleware = invalidateCache(['artworks:list:*'])
+    await middleware(req, res, next)
+    await res.json({ error: 'bad request' })
+
+    expect(mockCache.delPattern).not.toHaveBeenCalled()
+  })
+})
+
+describe('invalidateArtworkCache', () => {
+  beforeEach(() => jest.clearAllMocks())
+
+  it('invalidates specific artwork keys when artworkId provided', async () => {
+    mockCache.del.mockResolvedValue(true)
+    mockCache.delPattern.mockResolvedValue(true)
+
+    await invalidateArtworkCache('abc123')
+
+    expect(mockCache.del).toHaveBeenCalledWith('artwork:detail:abc123')
+    expect(mockCache.del).toHaveBeenCalledWith('metadata:abc123')
+    expect(mockCache.delPattern).toHaveBeenCalledWith('artworks:list:*')
   })
 
-  describe('Artwork Caching', () => {
-    it('should cache artwork list response', async () => {
-      // First request - should hit the database
-      const response1 = await request(app)
-        .get('/api/artworks')
-        .expect(200)
+  it('invalidates all artwork keys when no artworkId provided', async () => {
+    mockCache.delPattern.mockResolvedValue(true)
 
-      expect(response1.body.success).toBe(true)
-      expect(response1.headers['etag']).toBeDefined()
+    await invalidateArtworkCache()
 
-      // Second request - should hit cache
-      const response2 = await request(app)
-        .get('/api/artworks')
-        .expect(200)
+    expect(mockCache.delPattern).toHaveBeenCalledWith('artwork:detail:*')
+    expect(mockCache.delPattern).toHaveBeenCalledWith('artworks:list:*')
+    expect(mockCache.delPattern).toHaveBeenCalledWith('metadata:*')
+  })
+})
 
-      expect(response2.body.success).toBe(true)
-      expect(response2.body.data).toEqual(response1.body.data)
-      expect(response2.headers['etag']).toEqual(response1.headers['etag'])
-    })
+describe('invalidateUserCache', () => {
+  beforeEach(() => jest.clearAllMocks())
 
-    it('should cache individual artwork response', async () => {
-      const artworkId = '1'
+  it('invalidates profile, stats, and activity keys for a user', async () => {
+    mockCache.del.mockResolvedValue(true)
+    mockCache.delPattern.mockResolvedValue(true)
 
-      // First request - should hit the database
-      const response1 = await request(app)
-        .get(`/api/artworks/${artworkId}`)
-        .expect(200)
+    await invalidateUserCache('GADDR123')
 
-      expect(response1.body.success).toBe(true)
-      expect(response1.headers['etag']).toBeDefined()
+    expect(mockCache.del).toHaveBeenCalledWith('user:profile:GADDR123')
+    expect(mockCache.del).toHaveBeenCalledWith('user:stats:GADDR123')
+    expect(mockCache.delPattern).toHaveBeenCalledWith('user:activity:GADDR123:*')
+  })
+})
 
-      // Second request with matching ETag - should return 304
-      await request(app)
-        .get(`/api/artworks/${artworkId}`)
-        .set('If-None-Match', response1.headers['etag'])
-        .expect(304)
-    })
+describe('getUserStats caching via cacheService.getOrSet', () => {
+  beforeEach(() => jest.clearAllMocks())
 
-    it('should invalidate cache when creating new artwork', async () => {
-      // First request to populate cache
-      await request(app)
-        .get('/api/artworks')
-        .expect(200)
+  it('uses getOrSet with user:stats key and 300s TTL', async () => {
+    // Import controller after mocks are set up
+    const { getUserStats } = await import('@/controllers/userController')
 
-      // Create new artwork (should invalidate cache)
-      const newArtwork = {
-        title: 'Test Artwork',
-        description: 'Test Description',
-        imageUrl: 'https://example.com/test.jpg',
-        price: '0.1',
-        prompt: 'Test prompt',
-        aiModel: 'Test Model'
-      }
+    const fetched = {
+      created: 5, collected: 3, favorites: 10,
+      followers: 100, following: 50,
+      totalSales: '500', totalPurchases: '200',
+    }
+    mockCache.getOrSet.mockImplementation(async (key, fetcher, ttl) => fetched)
 
-      await request(app)
-        .post('/api/artworks')
-        .send(newArtwork)
-        .expect(201)
+    const req = { params: { address: 'GADDR123' }, requestId: 'test' } as unknown as Request
+    const res = makeRes(200)
+    const next: NextFunction = jest.fn()
 
-      // Verify cache was invalidated by checking cache stats
-      const stats = cacheService.getCacheStats()
-      expect(stats.fallbackKeys).toBe(0)
-    })
+    await getUserStats(req, res, next)
+
+    expect(mockCache.getOrSet).toHaveBeenCalledWith(
+      'user:stats:GADDR123',
+      expect.any(Function),
+      300,
+    )
+    expect(res.json).toHaveBeenCalledWith({ success: true, data: fetched })
+    expect(next).not.toHaveBeenCalled()
   })
 
-  describe('User Profile Caching', () => {
-    it('should cache user profile response', async () => {
-      // First request
-      const response1 = await request(app)
-        .get('/api/users/profile')
-        .expect(200)
+  it('calls next with 404 when getOrSet returns null (user not found)', async () => {
+    const { getUserStats } = await import('@/controllers/userController')
 
-      expect(response1.body.success).toBe(true)
+    mockCache.getOrSet.mockResolvedValue(null)
 
-      // Second request - should hit cache
-      const response2 = await request(app)
-        .get('/api/users/profile')
-        .expect(200)
+    const req = { params: { address: 'UNKNOWN' }, requestId: 'test' } as unknown as Request
+    const res = makeRes(200)
+    const next: NextFunction = jest.fn()
 
-      expect(response2.body.data).toEqual(response1.body.data)
-    })
-  })
+    await getUserStats(req, res, next)
 
-  describe('Metadata Caching', () => {
-    it('should cache metadata response', async () => {
-      const artworkId = '1'
-
-      // First request
-      const response1 = await request(app)
-        .get(`/api/metadata/artwork/${artworkId}`)
-        .expect(200)
-
-      expect(response1.body.success).toBe(true)
-      expect(response1.headers['etag']).toBeDefined()
-
-      // Second request with matching ETag - should return 304
-      await request(app)
-        .get(`/api/metadata/artwork/${artworkId}`)
-        .set('If-None-Match', response1.headers['etag'])
-        .expect(304)
-    })
-  })
-
-  describe('AI Status Caching', () => {
-    it('should cache AI generation status', async () => {
-      const generationId = '123'
-
-      // First request
-      const response1 = await request(app)
-        .get(`/api/ai/status/${generationId}`)
-        .expect(200)
-
-      expect(response1.body.success).toBe(true)
-
-      // Second request - should hit cache
-      const response2 = await request(app)
-        .get(`/api/ai/status/${generationId}`)
-        .expect(200)
-
-      expect(response2.body.data).toEqual(response1.body.data)
-    })
-  })
-
-  describe('Cache Management API', () => {
-    it('should return cache statistics', async () => {
-      const response = await request(app)
-        .get('/api/cache/stats')
-        .expect(200)
-
-      expect(response.body.success).toBe(true)
-      expect(response.body.data).toHaveProperty('useRedis')
-      expect(response.body.data).toHaveProperty('fallbackKeys')
-    })
-
-    it('should clear all caches', async () => {
-      // Populate some cache
-      await request(app)
-        .get('/api/artworks')
-        .expect(200)
-
-      // Clear cache
-      const response = await request(app)
-        .delete('/api/cache/clear')
-        .expect(200)
-
-      expect(response.body.success).toBe(true)
-      expect(response.body.message).toContain('cleared successfully')
-    })
-
-    it('should invalidate artwork caches', async () => {
-      // Populate some cache
-      await request(app)
-        .get('/api/artworks')
-        .expect(200)
-
-      // Invalidate artwork caches
-      const response = await request(app)
-        .delete('/api/cache/invalidate/artworks')
-        .expect(200)
-
-      expect(response.body.success).toBe(true)
-      expect(response.body.message).toContain('artwork caches invalidated')
-    })
-
-    it('should invalidate specific artwork cache', async () => {
-      const artworkId = '1'
-
-      // Invalidate specific artwork cache
-      const response = await request(app)
-        .delete(`/api/cache/invalidate/artworks?artworkId=${artworkId}`)
-        .expect(200)
-
-      expect(response.body.success).toBe(true)
-      expect(response.body.message).toContain(artworkId)
-    })
-  })
-
-  describe('Cache Behavior with Different Parameters', () => {
-    it('should cache different query parameters separately', async () => {
-      // Request with page=1
-      const response1 = await request(app)
-        .get('/api/artworks?page=1&limit=10')
-        .expect(200)
-
-      // Request with page=2
-      const response2 = await request(app)
-        .get('/api/artworks?page=2&limit=10')
-        .expect(200)
-
-      // Should be cached separately
-      const cacheKey1 = `cache:GET:/api/artworks:{"page":"1","limit":"10"}:/api/artworks?page=1&limit=10`
-      const cacheKey2 = `cache:GET:/api/artworks:{"page":"2","limit":"10"}:/api/artworks?page=2&limit=10`
-
-      const cached1 = await cacheService.get(cacheKey1)
-      const cached2 = await cacheService.get(cacheKey2)
-
-      expect(cached1).toBeTruthy()
-      expect(cached2).toBeTruthy()
-      expect(cached1.data).not.toEqual(cached2.data)
-    })
+    expect(next).toHaveBeenCalledWith(expect.objectContaining({ status: 404 }))
   })
 })

@@ -1,232 +1,220 @@
-import mongoose, { Schema, Document } from 'mongoose'
+import mongoose, { Document, Schema } from 'mongoose'
 
-export interface UserDocument extends Document {
-  publicKey: string
-  username?: string
+export interface IRefreshToken {
+  tokenHash: string
+  family: string
+  expiresAt: Date
+  createdAt: Date
+}
+
+export interface IUser extends Document {
+  address: string
+  username: string
   email?: string
   bio?: string
+  profileImage?: string
+  avatar?: string
+  bannerImage?: string
+  banner?: string
   website?: string
   twitter?: string
   discord?: string
-  avatar?: string
-  banner?: string
+  tier: 'free' | 'pro' | 'premium'
   isVerified: boolean
+  refreshTokens: IRefreshToken[]
+  stats?: {
+    artworks?: number
+    sales?: number
+    created?: number
+    collected?: number
+    favorites?: number
+    totalSales?: string
+    totalPurchases?: string
+    followers?: number
+    following?: number
+  }
+  preferences?: {
+    notifications?: {
+      email?: boolean
+      push?: boolean
+    }
+    privacy?: {
+      profileVisibility?: 'public' | 'private'
+      showEmail?: boolean
+    }
+    display?: string
+    theme?: string
+    currency?: string
+    language?: string
+  }
   createdAt: Date
   updatedAt: Date
-  stats: UserStats
-  preferences: UserPreferences
 }
 
-export interface UserStats {
-  artworksCreated: number
-  artworksOwned: number
-  totalSales: string
-  totalPurchases: string
-  followers: number
-  following: number
-}
-
-export interface UserPreferences {
-  notifications: NotificationPreferences
-  privacy: PrivacyPreferences
-  display: DisplayPreferences
-}
-
-export interface NotificationPreferences {
-  email: boolean
-  push: boolean
-  sales: boolean
-  purchases: boolean
-  follows: boolean
-  priceAlerts: boolean
-}
-
-export interface PrivacyPreferences {
-  showPublicProfile: boolean
-  showHoldings: boolean
-  showActivity: boolean
-  allowMessages: boolean
-}
-
-export interface DisplayPreferences {
-  theme: 'light' | 'dark' | 'auto'
-  language: string
-  currency: string
-  timezone: string
-}
-
-const UserStatsSchema = new Schema<UserStats>({
-  artworksCreated: { type: Number, default: 0, min: 0 },
-  artworksOwned: { type: Number, default: 0, min: 0 },
-  totalSales: { type: String, default: '0' },
-  totalPurchases: { type: String, default: '0' },
-  followers: { type: Number, default: 0, min: 0 },
-  following: { type: Number, default: 0, min: 0 }
-}, { _id: false })
-
-const NotificationPreferencesSchema = new Schema<NotificationPreferences>({
-  email: { type: Boolean, default: true },
-  push: { type: Boolean, default: true },
-  sales: { type: Boolean, default: true },
-  purchases: { type: Boolean, default: true },
-  follows: { type: Boolean, default: true },
-  priceAlerts: { type: Boolean, default: true }
-}, { _id: false })
-
-const PrivacyPreferencesSchema = new Schema<PrivacyPreferences>({
-  showPublicProfile: { type: Boolean, default: true },
-  showHoldings: { type: Boolean, default: true },
-  showActivity: { type: Boolean, default: true },
-  allowMessages: { type: Boolean, default: true }
-}, { _id: false })
-
-const DisplayPreferencesSchema = new Schema<DisplayPreferences>({
-  theme: { type: String, enum: ['light', 'dark', 'auto'], default: 'dark' },
-  language: { type: String, default: 'en' },
-  currency: { type: String, default: 'ETH' },
-  timezone: { type: String, default: 'UTC' }
-}, { _id: false })
-
-const UserPreferencesSchema = new Schema<UserPreferences>({
-  notifications: NotificationPreferencesSchema,
-  privacy: PrivacyPreferencesSchema,
-  display: DisplayPreferencesSchema
-}, { _id: false })
-
-const UserSchema = new Schema<UserDocument>({
-  publicKey: {
-    type: String,
-    required: true,
-    unique: true,
-    index: true,
-    trim: true,
-    validate: {
-      validator: function(v: string) {
-        // Basic validation for Stellar public key format
-        return /^[G][A-Z0-9]{55}$/.test(v)
+const UserSchema: Schema = new Schema(
+  {
+    address: { type: String, required: true, unique: true, index: true, trim: true },
+    username: { type: String, required: true, trim: true, index: true },
+    email: { type: String, sparse: true, trim: true, lowercase: true },
+    bio: { type: String, trim: true, maxlength: 500 },
+    profileImage: { type: String },
+    avatar: { type: String },
+    bannerImage: { type: String },
+    banner: { type: String },
+    website: { type: String },
+    twitter: { type: String },
+    discord: { type: String },
+    tier: {
+      type: String,
+      enum: ['free', 'pro', 'premium'],
+      default: 'free',
+    },
+    isVerified: { type: Boolean, default: false },
+    refreshTokens: {
+      type: [
+        {
+          tokenHash: { type: String, required: true },
+          family: { type: String, required: true },
+          expiresAt: { type: Date, required: true },
+          createdAt: { type: Date, default: Date.now },
+        },
+      ],
+      default: [],
+    },
+    stats: {
+      artworks: { type: Number, default: 0 },
+      sales: { type: Number, default: 0 },
+      created: { type: Number, default: 0 },
+      collected: { type: Number, default: 0 },
+      favorites: { type: Number, default: 0 },
+      totalSales: { type: String, default: '0' },
+      totalPurchases: { type: String, default: '0' },
+      followers: { type: Number, default: 0 },
+      following: { type: Number, default: 0 },
+    },
+    preferences: {
+      notifications: {
+        email: { type: Boolean, default: true },
+        push: { type: Boolean, default: true },
       },
-      message: 'Invalid Stellar public key format'
-    }
-  },
-  username: {
-    type: String,
-    unique: true,
-    sparse: true,
-    trim: true,
-    minlength: 3,
-    maxlength: 30,
-    validate: {
-      validator: function(v: string) {
-        return /^[a-zA-Z0-9_]+$/.test(v)
+      privacy: {
+        profileVisibility: {
+          type: String,
+          enum: ['public', 'private'],
+          default: 'public',
+        },
+        showEmail: { type: Boolean, default: false },
       },
-      message: 'Username can only contain letters, numbers, and underscores'
-    }
+      display: { type: String, default: 'grid' },
+      theme: { type: String, default: 'dark' },
+      currency: { type: String, default: 'XLM' },
+      language: { type: String, default: 'en' },
+    },
   },
-  email: {
-    type: String,
-    sparse: true,
-    trim: true,
-    lowercase: true,
-    validate: {
-      validator: function(v: string) {
-        return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v)
-      },
-      message: 'Invalid email format'
-    }
-  },
-  bio: {
-    type: String,
-    trim: true,
-    maxlength: 500
-  },
-  website: {
-    type: String,
-    trim: true,
-    validate: {
-      validator: function(v: string) {
-        if (!v) return true
-        return /^https?:\/\/.+/.test(v)
-      },
-      message: 'Website must be a valid URL'
-    }
-  },
-  twitter: {
-    type: String,
-    trim: true,
-    validate: {
-      validator: function(v: string) {
-        if (!v) return true
-        return /^[a-zA-Z0-9_]{1,15}$/.test(v)
-      },
-      message: 'Invalid Twitter username'
-    }
-  },
-  discord: {
-    type: String,
-    trim: true,
-    maxlength: 50
-  },
-  avatar: {
-    type: String,
-    trim: true
-  },
-  banner: {
-    type: String,
-    trim: true
-  },
-  isVerified: {
-    type: Boolean,
-    default: false,
-    index: true
-  },
-  stats: {
-    type: UserStatsSchema,
-    default: () => ({})
-  },
-  preferences: {
-    type: UserPreferencesSchema,
-    default: () => ({})
+  {
+    timestamps: true,
+    toJSON: { virtuals: true },
+    toObject: { virtuals: true },
   }
-}, {
-  timestamps: true,
-  toJSON: {
-    virtuals: true,
-    transform: function(doc, ret) {
-      ret.id = ret._id
-      delete ret._id
-      delete ret.__v
-      return ret
-    }
-  }
-})
+)
 
-// Indexes for performance optimization
+// Indexes for performance
 UserSchema.index({ username: 1 })
-UserSchema.index({ isVerified: 1, createdAt: -1 })
-UserSchema.index({ 'stats.artworksCreated': -1 })
+UserSchema.index({ address: 1 })
 UserSchema.index({ 'stats.followers': -1 })
+UserSchema.index({ username: 'text', bio: 'text' })
 
-// Virtual for getting user's public artworks
-UserSchema.virtual('publicArtworks', {
+// Virtual relationships - enable reverse lookups
+UserSchema.virtual('createdArtworks', {
   ref: 'Artwork',
-  localField: '_id',
+  localField: 'address',
   foreignField: 'creator',
-  match: { isListed: true }
+  justOne: false
 })
 
-// Virtual for getting user's owned artworks
 UserSchema.virtual('ownedArtworks', {
   ref: 'Artwork',
-  localField: '_id',
-  foreignField: 'owner'
+  localField: 'address',
+  foreignField: 'owner',
+  justOne: false
 })
 
-// Pre-save middleware to ensure data integrity
-UserSchema.pre('save', function(next) {
-  if (this.isModified('username') && this.username) {
-    this.username = this.username.toLowerCase()
-  }
-  next()
+UserSchema.virtual('transactions', {
+  ref: 'Transaction',
+  localField: 'address',
+  foreignField: 'from',
+  justOne: false
 })
 
-export const User = mongoose.model<UserDocument>('User', UserSchema)
+UserSchema.virtual('receivedTransactions', {
+  ref: 'Transaction',
+  localField: 'address',
+  foreignField: 'to',
+  justOne: false
+})
+
+UserSchema.virtual('bids', {
+  ref: 'Bid',
+  localField: 'address',
+  foreignField: 'bidder',
+  justOne: false
+})
+
+UserSchema.virtual('auctions', {
+  ref: 'Auction',
+  localField: 'address',
+  foreignField: 'seller',
+  justOne: false
+})
+
+UserSchema.virtual('collections', {
+  ref: 'Collection',
+  localField: 'address',
+  foreignField: 'creator',
+  justOne: false
+})
+
+UserSchema.virtual('comments', {
+  ref: 'Comment',
+  localField: 'address',
+  foreignField: 'author',
+  justOne: false
+})
+
+UserSchema.virtual('likes', {
+  ref: 'Like',
+  localField: 'address',
+  foreignField: 'user',
+  justOne: false
+})
+
+UserSchema.virtual('favorites', {
+  ref: 'Favorite',
+  localField: 'address',
+  foreignField: 'user',
+  justOne: false
+})
+
+UserSchema.virtual('followers_list', {
+  ref: 'Follow',
+  localField: 'address',
+  foreignField: 'following',
+  justOne: false
+})
+
+UserSchema.virtual('following_list', {
+  ref: 'Follow',
+  localField: 'address',
+  foreignField: 'follower',
+  justOne: false
+})
+
+UserSchema.virtual('notifications', {
+  ref: 'Notification',
+  localField: 'address',
+  foreignField: 'recipient',
+  justOne: false
+})
+
+export const User = mongoose.model<IUser>('User', UserSchema)
+export default User

@@ -1,212 +1,280 @@
 import { Request, Response, NextFunction } from 'express'
-import { 
-  createError, 
-  createValidationError, 
+import Artwork from '@/models/Artwork'
+import {
+  createValidationError,
   createNotFoundError,
   createDatabaseError,
-  createExternalServiceError 
 } from '@/middleware/errorHandler'
-import { invalidateArtworkCache } from '@/middleware/cacheMiddleware'
 import { createLogger } from '@/utils/logger'
-import { artworkService } from '@/services/artworkService'
-import { Artwork, ApiResponse, CreateArtworkRequest, ArtworkQueryParams } from '@/types'
+import { fileUploadService } from '@/services/fileUploadService'
 
 const logger = createLogger('ArtworkController')
 
+// ── GET /api/artworks ────────────────────────────────────────────────────────
 export const getArtworks = async (req: Request, res: Response, next: NextFunction) => {
+  const log = logger.child({ requestId: req.requestId })
   try {
-    const { page = '1', limit = '20', category, sort, creator, minPrice, maxPrice, isListed, search } = req.query
+    const {
+      page = 1,
+      limit = 20,
+      category,
+      creator,
+      isListed,
+      sort = '-createdAt',
+      search,
+      minPrice,
+      maxPrice,
+      artist,
+      style,
+      dateFrom,
+      dateTo,
+    } = req.query as Record<string, string>
+
+    const filter: Record<string, unknown> = {}
     
-    // Validate query parameters
-    const pageNum = parseInt(page as string)
-    const limitNum = parseInt(limit as string)
+    // Basic filters
+    if (category) filter.category = category.toLowerCase()
+    if (creator) filter.creator = creator
+    if (isListed !== undefined) filter.isListed = isListed === 'true'
     
-    if (isNaN(pageNum) || pageNum < 1) {
-      return res.status(400).json({
-        success: false,
-        error: {
-          code: 'VALIDATION_ERROR',
-          message: 'Invalid page number. Must be a positive integer.',
-          userMessage: 'Please enter a valid page number (1 or greater).'
-        }
-      })
+    // Advanced search filters
+    if (search) {
+      filter.$or = [
+        { title: { $regex: search, $options: 'i' } },
+        { description: { $regex: search, $options: 'i' } },
+        { prompt: { $regex: search, $options: 'i' } },
+        { category: { $regex: search, $options: 'i' } },
+      ]
     }
     
-    if (isNaN(limitNum) || limitNum < 1 || limitNum > 100) {
-      return res.status(400).json({
-        success: false,
-        error: {
-          code: 'VALIDATION_ERROR',
-          message: 'Invalid limit. Must be between 1 and 100.',
-          userMessage: 'Please limit your results to between 1 and 100 items per page.'
+    // Price range filter
+    if (minPrice || maxPrice) {
+      filter.price = {}
+      if (minPrice) {
+        const min = parseFloat(minPrice)
+        if (!isNaN(min)) filter.price.$gte = min.toString()
+      }
+      if (maxPrice) {
+        const max = parseFloat(maxPrice)
+        if (!isNaN(max)) filter.price.$lte = max.toString()
+      }
+    }
+    
+    // Artist filter (alias for creator)
+    if (artist) filter.creator = artist
+    
+    // Style filter (alias for category)
+    if (style) filter.category = style.toLowerCase()
+    
+    // Creation date range filter
+    if (dateFrom || dateTo) {
+      filter.createdAt = {}
+      if (dateFrom) {
+        const fromDate = new Date(dateFrom)
+        if (!isNaN(fromDate.getTime())) filter.createdAt.$gte = fromDate
+      }
+      if (dateTo) {
+        const toDate = new Date(dateTo)
+        if (!isNaN(toDate.getTime())) {
+          toDate.setHours(23, 59, 59, 999) // End of day
+          filter.createdAt.$lte = toDate
         }
-      })
+      }
     }
 
-    // Use optimized artwork service with eager loading to prevent N+1 queries
-    const result = await artworkService.getArtworks({
-      page: page as string,
-      limit: limit as string,
-      category: category as string,
-      sort: sort as string,
-      creator: creator as string,
-      minPrice: minPrice as string,
-      maxPrice: maxPrice as string,
-      isListed: isListed as string,
-      search: search as string,
-      includeCreator: true,
-      includeOwner: false
+    const pageNum = Math.max(1, parseInt(String(page), 10))
+    const limitNum = Math.min(100, Math.max(1, parseInt(String(limit), 10)))
+    const skip = (pageNum - 1) * limitNum
+
+    const [artworks, total] = await Promise.all([
+      Artwork.find(filter).sort(sort).skip(skip).limit(limitNum).lean(),
+      Artwork.countDocuments(filter),
+    ])
+
+    log.info('Artworks fetched', { count: artworks.length, total, filters: Object.keys(filter) })
+    res.json({
+      success: true,
+      data: { artworks, total, page: pageNum, limit: limitNum, pages: Math.ceil(total / limitNum) },
     })
 
     res.json(result)
   } catch (error) {
-    logger.error('Error in getArtworks:', error)
-    
-    // Handle different types of errors
-    if (error instanceof Error) {
-      if (error.message.includes('database') || error.message.includes('connection')) {
-        const err = createDatabaseError('Failed to fetch artworks from database')
-        return next(err)
-      }
-      if (error.message.includes('external') || error.message.includes('api')) {
-        const err = createExternalServiceError('Art service', 'Failed to fetch artwork data')
-        return next(err)
-      }
-    }
-    
-    const err = createError(
-      'Unable to load artworks at this time',
-      500,
-      'ARTWORK_FETCH_ERROR',
-      { originalError: error instanceof Error ? error.message : 'Unknown error' }
-    )
-    next(err)
+    log.error('Failed to fetch artworks', { error })
+    next(createDatabaseError('Failed to fetch artworks'))
   }
 }
 
-export const getArtworkById = async (req: Request, res: Response, next: NextFunction) => {
+// ── GET /api/artworks/:id ────────────────────────────────────────────────────
+export const getArtwork = async (req: Request, res: Response, next: NextFunction) => {
+  const log = logger.child({ requestId: req.requestId })
   try {
     const { id } = req.params
-    
-    // Validate ID format
-    if (!id || id.trim() === '') {
-      return res.status(400).json({
-        success: false,
-        error: {
-          code: 'VALIDATION_ERROR',
-          message: 'Artwork ID is required',
-          userMessage: 'Please provide a valid artwork ID.'
-        }
-      })
+    const artwork = await Artwork.findById(id).lean()
+    if (!artwork) {
+      return next(createNotFoundError('Artwork'))
     }
-    
-    // Use optimized artwork service with eager loading to prevent N+1 queries
-    const artwork = await artworkService.getArtworkById(id, {
-      includeCreator: true,
-      includeOwner: true,
-      includeMetadata: true
-    })
-
-    res.json({
-      success: true,
-      data: artwork,
-    })
+    log.info('Artwork fetched', { artworkId: id })
+    res.json({ success: true, data: artwork })
   } catch (error) {
-    logger.error('Error in getArtworkById:', error)
-    
-    if (error instanceof Error && error.message === 'Artwork not found') {
-      const err = createNotFoundError('Artwork not found')
-      return next(err)
-    }
-    
-    const err = createError(
-      'Unable to load artwork details',
-      500,
-      'ARTWORK_DETAILS_ERROR',
-      { artworkId: req.params.id }
-    )
-    next(err)
+    log.error('Failed to fetch artwork', { artworkId: req.params.id, error })
+    next(createDatabaseError('Failed to fetch artwork'))
   }
 }
 
+// ── POST /api/artworks ───────────────────────────────────────────────────────
 export const createArtwork = async (req: Request, res: Response, next: NextFunction) => {
+  const log = logger.child({ requestId: req.requestId })
   try {
-    const { title, description, imageUrl, price, category, prompt, aiModel, attributes } = req.body
-    
-    // Validate required fields
-    const validationErrors: string[] = []
-    
-    if (!title || title.trim() === '') {
-      validationErrors.push('Title is required')
-    }
-    
-    if (!description || description.trim() === '') {
-      validationErrors.push('Description is required')
-    }
-    
-    if (!imageUrl || imageUrl.trim() === '') {
-      validationErrors.push('Image URL is required')
-    }
-    
-    if (!price || price.trim() === '') {
-      validationErrors.push('Price is required')
-    }
-    
-    if (!category || category.trim() === '') {
-      validationErrors.push('Category is required')
-    }
-    
-    // Validate price format
-    if (price && isNaN(parseFloat(price))) {
-      validationErrors.push('Price must be a valid number')
-    }
-    
-    if (validationErrors.length > 0) {
-      return res.status(400).json({
-        success: false,
-        error: {
-          code: 'VALIDATION_ERROR',
-          message: 'Validation failed',
-          userMessage: 'Please check all required fields and try again.',
-          details: { validationErrors }
-        }
-      })
-    }
-    
-    // Get creator ID from authenticated user (for now using a placeholder)
-    // In a real implementation, this would come from authentication middleware
-    const creatorId = (req as any).user?.publicKey || '507f1f77bcf86cd799439011'
-    
-    // Use optimized artwork service with proper database operations
-    const artwork = await artworkService.createArtwork({
-      title: title.trim(),
-      description: description.trim(),
-      imageUrl: imageUrl.trim(),
-      price: price.trim(),
-      category: category.trim(),
-      prompt: prompt?.trim(),
-      aiModel: aiModel?.trim(),
-      attributes
-    }, creatorId)
+    const { 
+      title, 
+      description, 
+      imageUrl, 
+      price, 
+      currency, 
+      category, 
+      prompt, 
+      aiModel,
+      fileUpload,
+      images 
+    } = req.body
 
-    res.status(201).json({
-      success: true,
-      data: artwork,
+    const validationErrors: string[] = []
+    if (!title?.trim()) validationErrors.push('title is required')
+    if (!description?.trim()) validationErrors.push('description is required')
+    if (!imageUrl?.trim()) validationErrors.push('imageUrl is required')
+    if (!price) validationErrors.push('price is required')
+    if (!category?.trim()) validationErrors.push('category is required')
+
+    if (validationErrors.length > 0) {
+      return next(createValidationError('Validation failed', { fields: validationErrors }))
+    }
+
+    const creator = (req as any).user?.address
+    if (!creator) {
+      return next(createValidationError('Creator wallet address is required'))
+    }
+
+    const artwork = await Artwork.create({
+      title,
+      description,
+      imageUrl,
+      price,
+      currency: currency ?? 'XLM',
+      category,
+      prompt,
+      aiModel,
+      creator,
+      owner: creator,
+      isListed: false,
+      fileUpload,
+      images,
     })
 
-    // Invalidate relevant caches after creating new artwork
-    invalidateArtworkCache(artwork.id).catch(error => 
-      logger.error('Failed to invalidate cache after artwork creation:', error)
-    )
+    log.info('Artwork created', { artworkId: artwork._id, creator })
+    res.status(201).json({ success: true, data: artwork })
   } catch (error) {
-    logger.error('Error in createArtwork:', error)
-    
-    const err = createError(
-      'Unable to create artwork at this time',
-      500,
-      'ARTWORK_CREATION_ERROR',
-      { requestBody: req.body }
-    )
-    next(err)
+    log.error('Failed to create artwork', { error })
+    next(createDatabaseError('Failed to create artwork'))
+  }
+}
+
+// ── PUT /api/artworks/:id ────────────────────────────────────────────────────
+export const updateArtwork = async (req: Request, res: Response, next: NextFunction) => {
+  const log = logger.child({ requestId: req.requestId })
+  try {
+    const { id } = req.params
+    const callerAddress = (req as any).user?.address
+
+    const artwork = await Artwork.findById(id)
+    if (!artwork) {
+      return next(createNotFoundError('Artwork'))
+    }
+
+    if (artwork.creator !== callerAddress && artwork.owner !== callerAddress) {
+      return next(createValidationError('You do not have permission to update this artwork'))
+    }
+
+    const allowedUpdates = ['title', 'description', 'price', 'currency', 'isListed', 'metadata']
+    const updates: Record<string, unknown> = {}
+    allowedUpdates.forEach((field) => {
+      if (req.body[field] !== undefined) updates[field] = req.body[field]
+    })
+
+    const updated = await Artwork.findByIdAndUpdate(id, updates, { new: true, runValidators: true })
+    log.info('Artwork updated', { artworkId: id })
+    res.json({ success: true, data: updated })
+  } catch (error) {
+    log.error('Failed to update artwork', { artworkId: req.params.id, error })
+    next(createDatabaseError('Failed to update artwork'))
+  }
+}
+
+// ── DELETE /api/artworks/:id ─────────────────────────────────────────────────
+export const deleteArtwork = async (req: Request, res: Response, next: NextFunction) => {
+  const log = logger.child({ requestId: req.requestId })
+  try {
+    const { id } = req.params
+    const callerAddress = (req as any).user?.address
+
+    const artwork = await Artwork.findById(id)
+    if (!artwork) {
+      return next(createNotFoundError('Artwork'))
+    }
+
+    if (artwork.creator !== callerAddress) {
+      return next(createValidationError('Only the creator can delete an artwork'))
+    }
+
+    // Delete associated files from S3 if they exist
+    if (artwork.fileUpload?.key) {
+      try {
+        await fileUploadService.deleteFile(artwork.fileUpload.key)
+        log.info('Associated file deleted from S3', { key: artwork.fileUpload.key })
+      } catch (error) {
+        log.warn('Failed to delete associated file from S3', { 
+          key: artwork.fileUpload.key, 
+          error 
+        })
+        // Continue with artwork deletion even if file deletion fails
+      }
+    }
+
+    // Delete multiple image formats if they exist
+    if (artwork.images) {
+      const imageKeys = Object.values(artwork.images)
+        .filter(url => url && url.includes('/')) // Filter out empty/null values
+        .map(url => {
+          try {
+            const urlObj = new URL(url)
+            return urlObj.pathname.substring(1) // Remove leading slash
+          } catch {
+            return null
+          }
+        })
+        .filter(key => key) as string[]
+
+      for (const key of imageKeys) {
+        try {
+          await fileUploadService.deleteFile(key)
+          log.info('Associated image format deleted from S3', { key })
+        } catch (error) {
+          log.warn('Failed to delete associated image format from S3', { 
+            key, 
+            error 
+          })
+        }
+      }
+    }
+
+    await Artwork.findByIdAndDelete(id)
+    log.info('Artwork deleted', { artworkId: id })
+    res.json({ 
+      success: true, 
+      data: null,
+      message: 'Artwork and associated files deleted successfully'
+    })
+  } catch (error) {
+    log.error('Failed to delete artwork', { artworkId: req.params.id, error })
+    next(createDatabaseError('Failed to delete artwork'))
   }
 }

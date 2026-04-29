@@ -1,6 +1,7 @@
 import React from 'react'
 import { AlertCircle, RefreshCw, X } from 'lucide-react'
 import { AppError, ErrorHandler } from '@/utils/errorHandler'
+import { Button } from '@/components/ui/Button'
 
 interface ErrorDisplayProps {
   error: AppError | null
@@ -52,9 +53,15 @@ export function ErrorDisplay({
   }
 
   return (
-    <div className={`border rounded-lg p-4 ${getErrorColor()} ${className}`}>
+    <div 
+      className={`border rounded-lg p-4 ${getErrorColor()} ${className}`}
+      role="alert"
+      aria-live="assertive"
+    >
       <div className="flex items-start space-x-3">
-        {getErrorIcon()}
+        <div aria-hidden="true">
+          {getErrorIcon()}
+        </div>
 
         <div className="flex-1 min-w-0">
           <h3 className="text-sm font-medium mb-1">
@@ -65,9 +72,10 @@ export function ErrorDisplay({
           {error.isRecoverable && showRetry && onRetry && (
             <button
               onClick={onRetry}
-              className="mt-2 inline-flex items-center space-x-1 text-sm font-medium underline hover:no-underline"
+              className="mt-2 inline-flex items-center space-x-1 text-sm font-medium underline hover:no-underline focus-visible:ring-2 focus-visible:ring-offset-1 rounded"
+              aria-label={`Retry failed action: ${error.code.replace('_', ' ')}`}
             >
-              <RefreshCw className="h-3 w-3" />
+              <RefreshCw className="h-3 w-3" aria-hidden="true" />
               <span>Try Again</span>
             </button>
           )}
@@ -76,10 +84,10 @@ export function ErrorDisplay({
         {showDismiss && onDismiss && (
           <button
             onClick={onDismiss}
-            className="flex-shrink-0 p-1 rounded-md hover:bg-black/5 transition-colors"
-            aria-label="Dismiss error"
+            className="flex-shrink-0 p-1 rounded-md hover:bg-black/5 transition-colors focus-visible:ring-2"
+            aria-label="Dismiss this error"
           >
-            <X className="h-4 w-4" />
+            <X className="h-4 w-4" aria-hidden="true" />
           </button>
         )}
       </div>
@@ -187,12 +195,14 @@ export class ErrorBoundary extends React.Component<
               <p className="text-gray-600 mb-6">
                 {this.state.error.userMessage}
               </p>
-              <button
+              <Button
                 onClick={this.handleRetry}
-                className="btn-primary w-full"
+                variant="primary"
+                size="lg"
+                className="w-full"
               >
                 Try Again
-              </button>
+              </Button>
             </div>
           </div>
         </div>
