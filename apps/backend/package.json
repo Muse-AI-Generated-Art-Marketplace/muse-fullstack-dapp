@@ -12,9 +12,11 @@
     "lint:security": "eslint -c .eslintrc.security.js src --ext .ts --max-warnings 0",
     "lint:fix": "eslint src --ext .ts --fix",
     "migrate": "tsx migrationScripts/run.ts up",
+    "migrate:dry-run": "tsx migrationScripts/run.ts dry-run",
     "migrate:rollback": "tsx migrationScripts/run.ts down",
     "migrate:status": "tsx migrationScripts/run.ts status",
-    "migrate:run": "tsx migrationScripts/run.ts run"
+    "migrate:run": "tsx migrationScripts/run.ts run",
+    "migrate:create": "tsx migrationScripts/create.ts"
   },
   "dependencies": {
     "@types/jsonwebtoken": "^9.0.10",
@@ -29,7 +31,7 @@
     "express": "^4.18.2",
     "express-rate-limit": "^6.10.0",
     "helmet": "^7.0.0",
-    "jsonwebtoken": "^9.0.3",
+  "jsonwebtoken": "^9.0.3",
     "mime-types": "^2.1.35",
     "mongoose": "^7.5.0",
     "morgan": "^1.10.0",
