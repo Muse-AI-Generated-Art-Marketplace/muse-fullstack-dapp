@@ -2,6 +2,8 @@ import { Router } from "express";
 import { generateImage, getGenerationStatus } from "@/controllers/aiController";
 import { aiStatusCache } from "@/middleware/cacheMiddleware";
 import { authenticate } from "@/middleware/authMiddleware";
+import { validate } from "@/middleware/validate";
+import { generateImageSchema, getGenerationStatusSchema } from "@/schemas";
 
 import { aiGenerationLimiter } from "@/middleware/rateLimitMiddleware";
 import { aiPromptSizeLimit } from "@/middleware/sizeLimitMiddleware";
@@ -57,6 +59,7 @@ router.post(
   authenticate,
   aiGenerationLimiter,
   aiPromptSizeLimit,
+  validate(generateImageSchema),
   generateImage,
 );
 
@@ -84,6 +87,6 @@ router.post(
  *       404:
  *         description: Generation not found
  */
-router.get("/status/:id", authenticate, aiStatusCache, getGenerationStatus);
+router.get("/status/:id", authenticate, aiStatusCache, validate(getGenerationStatusSchema), getGenerationStatus);
 
 export default router;

@@ -7,6 +7,7 @@ import User from "@/models/User";
 import { createError } from "@/middleware/errorHandler";
 import { createLogger } from "@/utils/logger";
 import cacheService from "@/services/cacheService";
+import { verificationService } from "@/services/verificationService";
 
 const logger = createLogger("AuthController");
 
@@ -39,6 +40,7 @@ function pruneExpiredTokens(tokens: { expiresAt: Date }[]) {
 }
 
 /**
+* Login with Stellar wallet signature verification
  * GET /api/auth/challenge
  * Returns a nonce for the client to sign with their Stellar wallet.
  */
@@ -70,18 +72,34 @@ export const login = async (
   next: NextFunction,
 ) => {
   try {
-    const { address, signature, payload } = req.body;
+    const { address, signature, username } = req.body;
 
-    const storedChallenge = await cacheService.get(`auth_challenge:${address}`);
-    if (!storedChallenge) {
-      return next(
-        createError(
-          "Challenge expired or not found. Please request a new challenge.",
-          401,
-        ),
-      );
+    if (!address || !signature) {
+      return next(createError("Address and signature are required", 400));
     }
 
+    // Verify signature using our verification service
+    const verificationResult = await verificationService.verifySignature(
+      address,
+      signature,
+      username
+    );
+
+    if (!verificationResult.success) {
+      return next(createError(verificationResult.error || "Authentication failed", 401));
+    }
+
+    const user = verificationResult.user!;
+
+    // Generate JWT
+    const token = jwt.sign(
+      {
+        address: user.address,
+        id: user.id,
+      },
+      JWT_SECRET,
+      { expiresIn: TOKEN_EXPIRY },
+    );
     if (payload !== storedChallenge) {
       return next(
         createError("Invalid payload: does not match authentication challenge", 401),
@@ -134,12 +152,17 @@ export const login = async (
         refreshToken,
         expiresIn: 15 * 60, // seconds
         user: {
+          id: user.id,
           address: user.address,
           username: user.username,
-          profileImage: user.profileImage,
+          tier: user.tier,
+          isVerified: user.isVerified,
         },
+        isNewUser: verificationResult.isNewUser,
       },
     });
+
+    logger.info(`User authenticated successfully: ${address}, tier: ${user.tier}`);
   } catch (error) {
     logger.error("Login failed:", error);
     next(createError("Authentication failed", 500));
@@ -147,6 +170,7 @@ export const login = async (
 };
 
 /**
+ * Generate a verification challenge for wallet signature
  * POST /api/auth/refresh
  * Rotates the refresh token: invalidates the old one and issues a new pair.
  * Detects token reuse (theft) by checking the token family.
@@ -159,6 +183,12 @@ export const refreshTokens = async (
   try {
     const { refreshToken } = req.body;
 
+    if (!address) {
+      return next(createError("Address is required", 400));
+    }
+
+    // Generate verification challenge using our service
+    const challenge = verificationService.generateChallenge(address);
     let decoded: { id: string; family: string };
     try {
       decoded = jwt.verify(refreshToken, REFRESH_SECRET) as { id: string; family: string };
@@ -212,11 +242,17 @@ export const refreshTokens = async (
     res.json({
       success: true,
       data: {
+        challenge: challenge.message,
+        nonce: challenge.nonce,
+        expiresAt: challenge.expiresAt,
+        timestamp: challenge.timestamp
         accessToken,
         refreshToken: newRefreshToken,
         expiresIn: 15 * 60,
       },
     });
+
+    logger.info(`Verification challenge generated for address: ${address}`);
   } catch (error) {
     logger.error("Token refresh failed:", error);
     next(createError("Token refresh failed", 500));

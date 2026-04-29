@@ -19,7 +19,7 @@ export interface IUser extends Document {
   website?: string
   twitter?: string
   discord?: string
-  tier: 'free' | 'pro' | 'premium'
+  tier: 'verified' | 'premium'
   isVerified: boolean
   refreshTokens: IRefreshToken[]
   stats?: {
@@ -66,8 +66,8 @@ const UserSchema: Schema = new Schema(
     discord: { type: String },
     tier: {
       type: String,
-      enum: ['free', 'pro', 'premium'],
-      default: 'free',
+      enum: ['verified', 'premium'],
+      default: 'verified',
     },
     isVerified: { type: Boolean, default: false },
     refreshTokens: {

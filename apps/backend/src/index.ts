@@ -33,6 +33,7 @@ import analyticsRoutes from '@/routes/analytics'
 import bidRoutes from '@/routes/bidRoutes'
 import fileUploadRoutes from '@/routes/fileUpload'
 import databaseMetricsRoutes from '@/routes/databaseMetrics'
+import rateLimitRoutes from '@/routes/rateLimit'
 import healthService from '@/services/healthService'
 import cacheService from '@/services/cacheService'
 import { jobQueueService } from '@/services/jobQueueService'
@@ -41,6 +42,7 @@ import { websocketService } from '@/services/websocketService'
 import { emailService } from '@/services/emailService'
 import { ensureIndexes } from '@/scripts/ensureIndexes'
 import { runMigrations } from '@/services/migrationService'
+import { redis } from '@/config/redis'
 import adminRoutes from '@/routes/admin'
 import cdnRoutes from '@/routes/cdn'
 import logsRoute from "./routes/logs";
@@ -217,10 +219,20 @@ export async function startServer() {
   await ensureIndexes()
   logger.info('🔍 Database indexes verified and created')
 
+  // Initialize Redis for distributed rate limiting
+  try {
+    await redis.connect()
+    logger.info('🔴 Redis connected for distributed rate limiting')
+  } catch (error) {
+    logger.warn('Redis connection failed, rate limiting will use memory fallback:', error)
+  }
+
   if (process.env.NODE_ENV !== 'test') {
     try {
       await jobQueueService.initialize()
-      logger.info('Job queue service initialized')
+      const { registerAllJobProcessors } = await import('@/services/jobProcessors')
+      registerAllJobProcessors(jobQueueService)
+      logger.info('Job queue service initialized and processors registered')
     } catch (error) {
       logger.warn('Job queue service initialization failed:', error)
     }
@@ -283,6 +295,12 @@ async function shutdown(signal: string) {
     await cacheService.disconnect()
   } catch (error) {
     logger.warn('Cache disconnect encountered an error:', error)
+  }
+
+  try {
+    await redis.disconnect()
+  } catch (error) {
+    logger.warn('Redis disconnect encountered an error:', error)
   }
 
   try {

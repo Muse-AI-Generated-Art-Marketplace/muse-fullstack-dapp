@@ -463,3 +463,126 @@ export interface ServiceHealth {
   error?: string
   lastCheck: string
 }
+
+// Webhook Types
+export interface Webhook {
+  id: string
+  url: string
+  events: string[]
+  secret?: string
+  isActive: boolean
+  userId: string
+  retryConfig: RetryConfig
+  headers?: Record<string, string>
+  createdAt: number
+  updatedAt: number
+  lastTriggered?: number
+  deliveryStats: DeliveryStats
+}
+
+export interface RetryConfig {
+  maxRetries: number
+  retryDelay: number
+  backoffMultiplier: number
+  maxRetryDelay: number
+}
+
+export interface DeliveryStats {
+  totalDeliveries: number
+  successfulDeliveries: number
+  failedDeliveries: number
+  lastDeliveryStatus?: 'success' | 'failed' | 'pending'
+  lastDeliveryTime?: number
+  averageDeliveryTime: number
+}
+
+export interface WebhookEvent {
+  id: string
+  type: string
+  data: any
+  timestamp: number
+  userId?: string
+  metadata?: Record<string, any>
+}
+
+export interface WebhookDelivery {
+  id: string
+  webhookId: string
+  eventId: string
+  status: 'pending' | 'success' | 'failed' | 'retrying'
+  attempts: number
+  maxAttempts: number
+  response?: {
+    statusCode: number
+    headers: Record<string, string>
+    body: string
+  }
+  error?: string
+  createdAt: number
+  updatedAt: number
+  nextRetryAt?: number
+}
+
+export interface WebhookPayload {
+  id: string
+  type: string
+  data: any
+  timestamp: number
+  signature?: string
+  metadata?: Record<string, any>
+}
+
+// Quota Types
+export interface UserQuota {
+  userId: string
+  tier: UserTier
+  requestsUsed: number
+  requestsLimit: number
+  windowStart: number
+  windowEnd: number
+  resetTime: number
+}
+
+export interface UserTier {
+  name: string
+  requestsPerWindow: number
+  windowSizeMs: number
+  features: string[]
+  priority: number
+}
+
+// Tracing Types
+export interface TraceSpan {
+  traceId: string
+  spanId: string
+  parentSpanId?: string
+  operationName: string
+  startTime: number
+  endTime?: number
+  duration?: number
+  status: 'pending' | 'success' | 'error'
+  tags: Record<string, any>
+  logs: TraceLog[]
+  service: string
+  resource?: string
+  error?: TraceError
+}
+
+export interface TraceLog {
+  timestamp: number
+  level: 'debug' | 'info' | 'warn' | 'error'
+  message: string
+  fields?: Record<string, any>
+}
+
+export interface TraceError {
+  type: string
+  message: string
+  stack?: string
+}
+
+export interface TraceContext {
+  traceId: string
+  spanId: string
+  baggage: Record<string, string>
+}
