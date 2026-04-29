@@ -1,14 +1,5 @@
 import { Router } from 'express'
 import { authenticate } from '@/middleware/authMiddleware'
-import { validate } from '@/middleware/validate'
-import {
-  createBidSchema,
-  updateBidStatusSchema,
-  getArtworkBidsSchema,
-  getUserBidsSchema,
-  expireBidsSchema,
-  checkAuctionEndingsSchema
-} from '@/schemas'
 import {
   createBid,
   updateBidStatus,
@@ -21,17 +12,17 @@ import {
 const router = Router()
 
 // Public routes
-router.get('/artwork/:artworkId', validate(getArtworkBidsSchema), getArtworkBids)
+router.get('/artwork/:artworkId', getArtworkBids)
 
 // Protected routes
 router.use(authenticate)
 
-router.post('/', validate(createBidSchema), createBid)
-router.get('/my-bids', validate(getUserBidsSchema), getUserBids)
+router.post('/', createBid)
+router.get('/my-bids', getUserBids)
 
 // Admin routes (for maintenance tasks)
-router.post('/expire', validate(expireBidsSchema), expireBids)
-router.post('/check-auctions', validate(checkAuctionEndingsSchema), checkAuctionEndings)
-router.put('/:id/status', validate(updateBidStatusSchema), updateBidStatus)
+router.post('/expire', expireBids)
+router.post('/check-auctions', checkAuctionEndings)
+router.put('/:id/status', updateBidStatus)
 
 export default router
