@@ -49,6 +49,10 @@ import cdnRoutes from '@/routes/cdn'
 import logsRoute from "./routes/logs";
 import { optionalAuthenticate } from '@/middleware/authMiddleware';
 import { standardLimiter } from '@/middleware/rateLimitMiddleware';
+import { setupSwagger } from '@/config/swagger';
+import { backupService } from '@/services/backupService';
+import { backupQueue } from '@/queues/backupQueue';
+import apiDashboardRoutes from '@/routes/apiDashboard';
 
 dotenv.config()
 
@@ -61,7 +65,7 @@ export function createApp() {
 
   app.use(cors(corsOptions))
   app.options('*', cors(corsOptions))
-  
+
   // ── Security Headers ─────────────────────────────────────────────────────────────
   // Apply security middleware early to ensure all responses have proper headers
   app.use(securityMiddleware)
@@ -71,15 +75,15 @@ export function createApp() {
   app.use(injectCDNConfig)
 
   app.use(
-    compression({
-      threshold: 0,
-      filter: (req, res) => {
-        if (req.headers['x-no-compression']) {
-          return false
+      compression({
+        threshold: 0,
+        filter: (req, res) => {
+          if (req.headers['x-no-compression']) {
+            return false
+          }
+          return compression.filter(req, res)
         }
-        return compression.filter(req, res)
-      }
-    })
+      })
   )
   app.use(express.json({ limit: '10mb' }))
   app.use(express.urlencoded({ extended: true }))
@@ -158,6 +162,7 @@ export function createApp() {
   app.use('/api/database', databaseMetricsRoutes)
   app.use('/api/admin', adminRoutes)
   app.use('/api/bids', bidRoutes)
+  app.use('/api/dashboard', apiDashboardRoutes)
 
   // ── 404 & Global Error Handlers ──────────────────────────────────────────────
   app.use(notFound)
@@ -173,75 +178,76 @@ export async function startServer() {
   if (database.getConnectionStatus()) {
     logger.info('Connected to MongoDB with connection pooling')
 
-  // Run pending database migrations before accepting traffic
-  try {
-    await runMigrations()
-    logger.info('✅ Database migrations completed')
-  } catch (error) {
-    logger.error('❌ Database migrations failed — aborting startup', error)
-    process.exit(1)
-  }
-
-  // Initialize backup service and scheduled backups
-  try {
-    await backupService.initialize()
-    logger.info('✅ Backup service initialized')
-  } catch (error) {
-    logger.warn('Backup service initialization failed:', error)
-  }
-
-  // Initialize backup queue (scheduled backups configured via BACKUP_SCHEDULE_CRON)
-  try {
-    // backupQueue is initialized on import (see queues/backupQueue.ts)
-    logger.info('✅ Backup queue initialized')
-  } catch (error) {
-    logger.warn('Backup queue initialization failed:', error)
-  }
-
-  // Ensure database indexes are created
-  await ensureIndexes()
-  logger.info('🔍 Database indexes verified and created')
-
-  // Initialize Redis for distributed rate limiting
-  try {
-    await redis.connect()
-    logger.info('🔴 Redis connected for distributed rate limiting')
-  } catch (error) {
-    logger.warn('Redis connection failed, rate limiting will use memory fallback:', error)
-  }
-
-  if (process.env.NODE_ENV !== 'test') {
+    // Run pending database migrations before accepting traffic
     try {
-      await jobQueueService.initialize()
-      const { registerAllJobProcessors } = await import('@/services/jobProcessors')
-      registerAllJobProcessors(jobQueueService)
-      logger.info('Job queue service initialized and processors registered')
+      await runMigrations()
+      logger.info('✅ Database migrations completed')
     } catch (error) {
-      logger.warn('Job queue service initialization failed:', error)
+      logger.error('❌ Database migrations failed — aborting startup', error)
+      process.exit(1)
     }
 
+    // Initialize backup service and scheduled backups
     try {
-      await emailService.initialize()
-      logger.info('Email service initialized')
+      await backupService.initialize()
+      logger.info('✅ Backup service initialized')
     } catch (error) {
-      logger.warn('Email service initialization failed:', error)
+      logger.warn('Backup service initialization failed:', error)
     }
+
+    // Initialize backup queue (scheduled backups configured via BACKUP_SCHEDULE_CRON)
+    try {
+      // backupQueue is initialized on import (see queues/backupQueue.ts)
+      logger.info('✅ Backup queue initialized')
+    } catch (error) {
+      logger.warn('Backup queue initialization failed:', error)
+    }
+
+    // Ensure database indexes are created
+    await ensureIndexes()
+    logger.info('🔍 Database indexes verified and created')
+
+    // Initialize Redis for distributed rate limiting
+    try {
+      await redis.connect()
+      logger.info('🔴 Redis connected for distributed rate limiting')
+    } catch (error) {
+      logger.warn('Redis connection failed, rate limiting will use memory fallback:', error)
+    }
+
+    if (process.env.NODE_ENV !== 'test') {
+      try {
+        await jobQueueService.initialize()
+        const { registerAllJobProcessors } = await import('@/services/jobProcessors')
+        registerAllJobProcessors(jobQueueService)
+        logger.info('Job queue service initialized and processors registered')
+      } catch (error) {
+        logger.warn('Job queue service initialization failed:', error)
+      }
+
+      try {
+        await emailService.initialize()
+        logger.info('Email service initialized')
+      } catch (error) {
+        logger.warn('Email service initialization failed:', error)
+      }
+    }
+
+    const server = app.listen(PORT, () => {
+      logger.info(`Server running on port ${PORT}`)
+      logger.info(`Cache stats: ${JSON.stringify(cacheService.getCacheStats())}`)
+    })
+
+    // Initialize WebSocket service
+    try {
+      websocketService.initialize(server)
+      logger.info('WebSocket service initialized')
+    } catch (error) {
+      logger.error('Failed to initialize WebSocket service:', error)
+    }
+
+    return server
   }
-
-  const server = app.listen(PORT, () => {
-    logger.info(`Server running on port ${PORT}`)
-    logger.info(`Cache stats: ${JSON.stringify(cacheService.getCacheStats())}`)
-  })
-
-  // Initialize WebSocket service
-  try {
-    websocketService.initialize(server)
-    logger.info('WebSocket service initialized')
-  } catch (error) {
-    logger.error('Failed to initialize WebSocket service:', error)
-  }
-
-  return server
 }
 
 if (process.env.NODE_ENV !== 'test') {
@@ -302,7 +308,5 @@ process.on('SIGINT', async () => {
   await shutdown('SIGINT')
   process.exit(0)
 })
-
-}
 
 export default app
