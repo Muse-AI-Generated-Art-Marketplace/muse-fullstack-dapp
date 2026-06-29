@@ -13,6 +13,7 @@ import { MintPage } from '@/pages/MintPage'
 import { ProfilePage } from '@/pages/ProfilePage'
 import { UserSettingsPage } from '@/pages/UserSettingsPage'
 import { ErrorTestPage } from '@/pages/ErrorTestPage'
+import { RateLimitDashboard } from '@/pages/RateLimitDashboard'
 
 function App() {
     return (
@@ -31,6 +32,7 @@ function App() {
                                         <Route path="/profile" element={<ProfilePage />} />
                                         <Route path="/settings" element={<UserSettingsPage />} />
                                         <Route path="/error-test" element={<ErrorTestPage />} />
+                                        <Route path="/admin/dashboard" element={<RateLimitDashboard />} />
                                     </Routes>
                                 </main>
                                 <ToastNotifications />
